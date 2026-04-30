@@ -1,0 +1,10 @@
+{
+  "teammateMode": "tmux",
+  "includeGitInstructions": false,
+  "enabledPlugins": {
+    "obsidian@obsidian-skills": true
+  },
+  "env": {
+    "CLAUDE_CODE_SPAWN_BACKEND": "tmux"
+  }
+}

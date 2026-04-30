@@ -1,0 +1,7 @@
+file: base.mp3
+text: 皆さん、はじめまして。本日はこのような場でお話しする機会をいただき、とても光栄に思っております。
+variants:
+  - file: base_10_percent_volume.mp3
+    description: 原始檔案的10%音量
+  - file: base_metal_drump.mp3
+    description: 原始檔加上重金屬鼓
