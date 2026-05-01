@@ -21,6 +21,12 @@ faster-whisper = [
 mlx = [
     "mlx-whisper>=0.4",
 ]
+align = [
+    "torch>=2.0",
+    "torchaudio>=2.0",
+    "transformers>=4.30",
+    "numpy>=1.24",
+]
 dev = [
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
