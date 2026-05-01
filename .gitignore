@@ -1,3 +1,11 @@
 # Spectra app data
 .spectra/
 docs/.obsidian/
+openspec/.vector-search.db*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/

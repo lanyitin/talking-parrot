@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run *)",
+      "Bash(spectra task *)"
+    ]
+  },
+  "enabledPlugins": {
+    "serena@claude-plugins-official": false,
+    "typescript-lsp@claude-plugins-official": false,
+    "playwright@claude-plugins-official": false,
+    "jdtls-lsp@claude-plugins-official": false
+  }
+}

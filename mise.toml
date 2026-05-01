@@ -1,2 +1,3 @@
 [tools]
 sonar-scanner-cli = "latest"
+uv = "latest"

@@ -1,0 +1,65 @@
+[project]
+name = "talking-parrot"
+version = "0.1.0"
+description = "A subtitle generation pipeline"
+readme = "README.md"
+authors = [
+    { name = "Lawrence Lan", email = "lanyitin@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "ffmpeg-python>=0.2.0",
+    "structlog>=24.0",
+]
+
+[project.optional-dependencies]
+faster-whisper = [
+    "faster-whisper>=1.0",
+]
+mlx = [
+    "mlx-whisper>=0.4",
+]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "mypy>=1.0",
+    "ruff>=0.15.11",
+]
+
+[project.scripts]
+talking-parrot = "talking_parrot.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.11.3,<0.12.0"]
+build-backend = "uv_build"
+
+# PyTorch platform strategy:
+#   macOS:         default PyPI builds (includes MPS support), no extra config needed
+#   Linux/Windows: CUDA 12.6 by default via [tool.uv.sources]
+#   CPU-only:      uv sync --no-sources  (skips CUDA index, uses PyPI CPU builds)
+#   CUDA 12.4:     change pytorch-cu126 URL below to .../cu124
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu126", marker = "sys_platform != 'darwin'" },
+]
+torchaudio = [
+    { index = "pytorch-cu126", marker = "sys_platform != 'darwin'" },
+]
+
+[tool.uv.extra-build-dependencies]
+flash-attn = ["torch"]
+
+[tool.coverage.run]
+source = ["talking-parrot"]
+
+[tool.coverage.xml]
+output = "coverage.xml"
+
