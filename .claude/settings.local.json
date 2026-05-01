@@ -3,7 +3,15 @@
     "allow": [
       "Bash(uv run *)",
       "Bash(spectra task *)",
-      "mcp__plugin_context7_context7__resolve-library-id"
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(spectra new *)",
+      "Bash(spectra status *)",
+      "Bash(spectra show *)",
+      "Bash(spectra instructions *)",
+      "Bash(spectra list *)",
+      "Bash(spectra unpark *)",
+      "Bash(spectra in-progress *)"
     ]
   },
   "enabledPlugins": {
