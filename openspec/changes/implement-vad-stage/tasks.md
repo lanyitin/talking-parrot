@@ -1,0 +1,37 @@
+## 1. Model and Config Updates
+
+- [x] 1.1 Update `VadSegment` in `src/talking_parrot/models/vad.py`: VadSegment model updated (breaking change within pre-release codebase) — replace `confidence: float` with `ten_vad_prob: float`, `silero_vad_prob: float`, `composite_score: float`; add `RawVadFrame` frozen dataclass with `time_ms: int` and `prob: float` (covers: RawVadFrame is an immutable value object)
+- [x] 1.2 VadConfig extended with `formula` and `neg_threshold` in `src/talking_parrot/config/models.py`: add `formula: str` defaulting to `"(ten_vad_prob + silero_vad_prob) / 2"` and `neg_threshold: float` defaulting to `0.35`
+
+## 2. VADBackend Interface
+
+- [x] [P] 2.1 Create `src/talking_parrot/vad/__init__.py` and `src/talking_parrot/vad/backend.py`: define `VADBackend` abstract base class with abstract `name: str` property and `analyze(audio_data: bytes, sample_rate: int) -> List[RawVadFrame]` method (covers: VADBackend interface defines the contract for all VAD backends)
+- [x] [P] 2.2 Create `tests/unit/vad/__init__.py` and `tests/unit/vad/test_backend.py`: verify that `VADBackend` cannot be instantiated directly and that a concrete subclass satisfying the interface can be instantiated; verify `RawVadFrame` is frozen and `prob` values in `[0.0, 1.0]` are accepted
+
+## 3. TenVADBackend
+
+- [x] 3.1 Create `src/talking_parrot/vad/ten_vad.py`: TenVADBackend wraps `ten_vad.TenVad` — implement `TenVADBackend(VADBackend)` with `hop_size: int = 256`, `threshold: float = 0.5` constructor args; lazy-init `TenVad(hop_size, threshold)` on first `analyze()` call; split PCM bytes into `hop_size`-sample chunks; call `TenVad.process(chunk)` per chunk; yield `RawVadFrame(time_ms=i * hop_size / sample_rate * 1000, prob=result.probability)`; `name` returns `"ten_vad"` (covers: TenVADBackend wraps ten_vad.TenVad and returns per-frame probabilities, Backend interface returns per-frame probabilities)
+- [x] 3.2 Create `tests/unit/vad/test_ten_vad.py`: mock `ten_vad.TenVad`; verify frame count equals `floor(N / hop_size)` for inputs of 256, 512, 1000, and 8000 samples; verify `time_ms` for first four frames equals `0, 16, 32, 48` with default hop_size=256 at 16000 Hz; verify `prob` equals `result.probability` from mock (covers: frame count for common audio lengths, frame time_ms matches chunk position, prob reflects TenVad result.probability)
+
+## 4. SileroVADBackend
+
+- [x] 4.1 Create `src/talking_parrot/vad/silero_vad.py`: SileroVADBackend wraps `silero_vad` — implement `SileroVADBackend(VADBackend)` with `chunk_size: int = 512` constructor arg; lazy-load model via `silero_vad.load_silero_vad()` on first `analyze()` call; split PCM bytes into `chunk_size`-sample chunks; call model per chunk; yield `RawVadFrame(time_ms=i * chunk_size / sample_rate * 1000, prob=probability)`; `name` returns `"silero_vad"` (covers: SileroVADBackend wraps silero_vad and returns per-frame probabilities, Backend interface returns per-frame probabilities)
+- [x] 4.2 Create `tests/unit/vad/test_silero_vad.py`: mock `silero_vad.load_silero_vad`; verify frame count equals `floor(N / chunk_size)` for inputs of 512, 1024, 1500, and 16000 samples; verify `time_ms` for first four frames equals `0, 32, 64, 96` with default chunk_size=512 at 16000 Hz; verify `prob` equals model output from mock (covers: frame count for common audio lengths, frame time_ms matches chunk position, prob reflects Silero model output)
+
+## 5. VADStage
+
+- [x] 5.1 Create `src/talking_parrot/stages/vad_stage.py`: implement `VADStage(PipelineStage)` with constructor `(backends: List[VADBackend], formula_evaluator: FormulaEvaluator)`; implement `process()` returning input ctx unchanged when `ctx.config.vad` is `None` or `ctx.config.vad.enabled` is `False` (covers: VADStage is disabled when vad config is absent or disabled)
+- [x] 5.2 Implement frame alignment by nearest-neighbour with zero-fill in `VADStage`: build unified timeline from union of all backend `time_ms` values; for each time point assign each backend's probability as the nearest frame within 50 ms tolerance, defaulting to `0.0` (zero-fill) if no frame is within tolerance (covers: VADStage aligns frames from multiple backends by nearest-neighbour, frame alignment with two backends at different rates, nearest-neighbour alignment)
+- [x] 5.3 Implement composite score computation in `VADStage` using backend name maps to formula variable via `{name}_prob`: call `formula_evaluator.evaluate(vad_config.formula, {f"{b.name}_prob": p for b, p in aligned_probs.items()})` per unified frame (covers: VADStage computes composite score per frame using FormulaEvaluator, composite score computed from formula)
+- [x] 5.4 Implement hysteresis-based segment merging (two thresholds) in `VADStage`: state machine transitions SILENCE → SPEECH at `composite_score >= activity_threshold` and SPEECH → SILENCE at `composite_score < neg_threshold` (covers: VADStage merges frames into segments using hysteresis thresholds, segment starts when score crosses activity_threshold, segment ends when score drops below neg_threshold, hysteresis prevents re-triggering between activity_threshold and neg_threshold)
+- [x] 5.5 Implement post-merge refinement in `VADStage` in order: (1) gap merging for gaps `< min_silence_duration_ms`, (2) short-segment filtering for segments `< min_speech_duration_ms`, (3) midpoint splitting for segments `> max_speech_duration_ms`, (4) speech padding clamped to `[0, audio_duration_ms]` (covers: VADStage applies post-merge refinement steps in order, short segments are discarded, adjacent segments with small gap are merged, long segment is split at midpoint, speech padding is applied and clamped)
+- [x] 5.6 Compute per-segment statistics and build `VadSegment` list: for each final segment compute mean `ten_vad_prob`, `silero_vad_prob`, `composite_score` across the segment's frames; return `ctx` with `vad_segments` populated (covers: VADStage outputs VadSegment list with per-backend and composite statistics, VadSegment statistics reflect frame averages)
+
+## 6. VADStage Tests
+
+- [x] 6.1 Create `tests/unit/stages/__init__.py` and `tests/unit/stages/test_vad_stage.py`: test that `process()` returns input ctx unchanged when `vad` is `None`; test that `process()` returns input ctx unchanged when `vad.enabled=False`
+- [x] 6.2 Test frame alignment: construct two mock backends returning frames at 16 ms and 32 ms intervals; verify unified timeline and nearest-neighbour assignment including the example from the spec (`time_ms=16`, `silero_vad_prob=0.85`)
+- [x] 6.3 Test composite score: use `FormulaEvaluator` with formula `"(ten_vad_prob * 0.9) + (silero_vad_prob * 0.1)"` and verify scores from the spec example table
+- [x] 6.4 Test hysteresis state machine: verify single-segment output when scores are `[0.6, 0.4, 0.6]` with `activity_threshold=0.5`, `neg_threshold=0.35`; verify segment boundary detection for score sequences `[0.3, 0.6, 0.8]` and `[0.8, 0.7, 0.3]`
+- [x] 6.5 Test refinement steps independently: gap merging (A ends 500 ms, B starts 550 ms, gap 50 ms < 100 ms → merged); short filtering (100 ms segment discarded when min=250); midpoint split (0–40000 ms → two segments at 20000 ms); speech padding (10–990 ms padded by 30 ms → 0–1000 ms clamped)
+- [x] 6.6 Test `VadSegment` statistics: verify `ten_vad_prob`, `silero_vad_prob`, `composite_score` equal the mean of their respective frame values as per the spec example

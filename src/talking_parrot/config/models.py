@@ -6,14 +6,30 @@ from pydantic import BaseModel, field_validator
 
 
 class VadConfig(BaseModel):
+    """Configuration for the VAD (Voice Activity Detection) stage.
+
+    Attributes:
+        enabled: Whether the VAD stage is active.
+        activity_threshold: Score at or above which a frame is considered speech onset.
+        neg_threshold: Score below which an active speech segment ends (hysteresis).
+        min_speech_duration_ms: Segments shorter than this are discarded after merging.
+        max_speech_duration_ms: Segments longer than this are split at the midpoint.
+        min_silence_duration_ms: Silent gaps shorter than this cause adjacent segments to merge.
+        speech_pad_ms: Milliseconds added before and after each segment (clamped to audio bounds).
+        formula: Arithmetic formula used by FormulaEvaluator to compute the composite VAD score.
+            Variable names follow the pattern ``{backend_name}_prob`` (e.g. ``ten_vad_prob``).
+    """
+
     model_config = {"extra": "forbid"}
 
     enabled: bool = True
     activity_threshold: float = 0.5
+    neg_threshold: float = 0.35
     min_speech_duration_ms: int = 250
     max_speech_duration_ms: int = 30000
     min_silence_duration_ms: int = 100
     speech_pad_ms: int = 30
+    formula: str = "(ten_vad_prob + silero_vad_prob) / 2"
 
 
 class ChunkingConfig(BaseModel):
