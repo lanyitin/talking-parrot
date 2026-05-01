@@ -26,6 +26,11 @@ class ConditionEvaluator(SafeExpressionEvaluator):
             ast.GtE,
             ast.Add,
             ast.Sub,
+            # Unary +/- so that negative numeric literals like ``-1.0`` parse
+            # under the AST whitelist. Required by the cascade-condition
+            # examples in the ``transcription-stage`` spec.
+            ast.USub,
+            ast.UAdd,
         }
 
     @property
