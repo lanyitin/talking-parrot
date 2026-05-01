@@ -648,3 +648,44 @@ tests:
   - tests/integration/test_pipeline_smoke.py
   - tests/unit/pipeline/__pycache__/test_orchestrator.cpython-313-pytest-9.0.3.pyc
 -->
+
+---
+### Requirement: ChunkingConfig has silence_pad_ms field
+
+The system SHALL add a `silence_pad_ms: int` field to `ChunkingConfig` with a default value of `50`. The field MUST be accepted by the YAML loader and MUST be validated to reject negative values.
+
+#### Scenario: Default value
+
+- **WHEN** `ChunkingConfig` is instantiated without specifying `silence_pad_ms`
+- **THEN** `config.chunking.silence_pad_ms` MUST equal `50`
+
+#### Scenario: Explicit value from YAML
+
+- **WHEN** the config YAML contains `chunking: { silence_pad_ms: 100 }`
+- **THEN** `config.chunking.silence_pad_ms` MUST equal `100`
+
+<!-- @trace
+source: implement-chunking-stage
+updated: 2026-05-01
+code:
+  - docs/TODOs.md
+  - src/talking_parrot/config/models.py
+  - src/talking_parrot/stages/chunking_stage.py
+  - src/talking_parrot/transcription/backend.py
+  - src/talking_parrot/transcription/mlx_whisper_backend.py
+  - src/talking_parrot/stages/__init__.py
+  - src/talking_parrot/transcription/faster_whisper_backend.py
+  - src/talking_parrot/transcription/__init__.py
+  - tests/unit/transcription/__init__.py
+  - src/talking_parrot/expression/condition.py
+  - src/talking_parrot/stages/transcription_stage.py
+  - src/talking_parrot/transcription/factory.py
+tests:
+  - tests/unit/stages/test_chunking_stage.py
+  - tests/unit/transcription/test_backend.py
+  - tests/unit/stages/test_transcription_stage.py
+  - tests/unit/transcription/test_factory.py
+  - tests/unit/config/test_models.py
+  - tests/unit/transcription/test_faster_whisper_backend.py
+  - tests/unit/transcription/test_mlx_whisper_backend.py
+-->
