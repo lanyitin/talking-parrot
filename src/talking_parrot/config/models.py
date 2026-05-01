@@ -33,11 +33,30 @@ class VadConfig(BaseModel):
 
 
 class ChunkingConfig(BaseModel):
+    """Configuration for the chunking stage.
+
+    Attributes:
+        enabled: Whether the chunking stage is active.
+        max_chunk_seconds: Maximum duration in seconds for a single chunk.
+        overlap_ms: Overlap in milliseconds between adjacent chunks.
+        silence_pad_ms: Milliseconds of silence added around each chunk boundary.
+            Must be non-negative.
+    """
+
     model_config = {"extra": "forbid"}
 
     enabled: bool = True
     max_chunk_seconds: int = 30
     overlap_ms: int = 200
+    silence_pad_ms: int = 50
+
+    @field_validator("silence_pad_ms")
+    @classmethod
+    def silence_pad_ms_must_be_non_negative(cls, v: int) -> int:
+        """Validate that silence_pad_ms is not negative."""
+        if v < 0:
+            raise ValueError("silence_pad_ms must be non-negative")
+        return v
 
 
 class TranscribingStep(BaseModel):

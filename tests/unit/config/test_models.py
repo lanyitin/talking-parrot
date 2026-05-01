@@ -66,6 +66,25 @@ class TestVadConfigNewFields:
         assert cfg.neg_threshold == 0.4
 
 
+class TestChunkingConfigSilencePad:
+    """Tests for the silence_pad_ms field on ChunkingConfig."""
+
+    def test_silence_pad_ms_default_is_50(self):
+        """ChunkingConfig.silence_pad_ms defaults to 50 when not specified."""
+        cfg = ChunkingConfig()
+        assert cfg.silence_pad_ms == 50
+
+    def test_silence_pad_ms_explicit_value(self):
+        """ChunkingConfig.silence_pad_ms accepts an explicit positive value."""
+        cfg = ChunkingConfig(silence_pad_ms=100)
+        assert cfg.silence_pad_ms == 100
+
+    def test_silence_pad_ms_negative_raises(self):
+        """ChunkingConfig.silence_pad_ms rejects negative values with a ValidationError."""
+        with pytest.raises(pydantic.ValidationError):
+            ChunkingConfig(silence_pad_ms=-1)
+
+
 class TestPipelineConfigUnknownFields:
     def test_unknown_top_level_field_rejected(self):
         with pytest.raises(pydantic.ValidationError):
