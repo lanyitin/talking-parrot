@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class VadConfig(BaseModel):
@@ -76,11 +76,65 @@ class AlignConfig(BaseModel):
 
 
 class PostProcessingConfig(BaseModel):
+    """Configuration for the post-processing stage.
+
+    Attributes:
+        enabled: Whether the post-processing stage is active.
+        max_line_length: Maximum number of characters per subtitle line
+            (interpreted as Python ``len()``).
+        max_lines_per_subtitle: Maximum number of lines per subtitle cue.
+        merge_gap_threshold_ms: Two adjacent cues whose inter-cue gap is at most
+            this many milliseconds are eligible for merging.
+        merge_max_duration_ms: A merged cue's total duration MUST NOT exceed
+            this many milliseconds. Per ADR-0003 / D7, this MUST be less than or
+            equal to ``split_max_duration_ms`` so that Merge cannot produce a
+            cue that Split would then need to break apart.
+        split_max_duration_ms: A cue whose duration exceeds this many
+            milliseconds is split into multiple cues.
+    """
+
     model_config = {"extra": "forbid"}
 
     enabled: bool = True
     max_line_length: int = 42
     max_lines_per_subtitle: int = 2
+    merge_gap_threshold_ms: int = 200
+    merge_max_duration_ms: int = 6000
+    split_max_duration_ms: int = 6000
+
+    @model_validator(mode="after")
+    def _validate_merge_le_split(self) -> "PostProcessingConfig":
+        """Enforce ``merge_max_duration_ms <= split_max_duration_ms`` (D7)."""
+        if self.merge_max_duration_ms > self.split_max_duration_ms:
+            raise ValueError(
+                "merge_max_duration_ms "
+                f"({self.merge_max_duration_ms}) must be <= "
+                f"split_max_duration_ms ({self.split_max_duration_ms})"
+            )
+        return self
+
+
+class ExportConfig(BaseModel):
+    """Configuration for the subtitle-export step (Stage 6).
+
+    Attributes:
+        format: Subtitle format identifier — must be ``"srt"`` or ``"webvtt"``.
+        output_path: Filesystem path where the subtitle file SHALL be written.
+            Must be non-empty after ``strip()``.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    format: Literal["srt", "webvtt"]
+    output_path: str
+
+    @field_validator("output_path")
+    @classmethod
+    def output_path_must_be_non_empty(cls, v: str) -> str:
+        """Reject empty or whitespace-only ``output_path`` values."""
+        if not v.strip():
+            raise ValueError("output_path must be non-empty")
+        return v
 
 
 class PipelineConfig(BaseModel):
@@ -92,6 +146,7 @@ class PipelineConfig(BaseModel):
     transcribing: list[TranscribingStep]
     align: Optional[AlignConfig] = None
     post_processing: Optional[PostProcessingConfig] = None
+    export: Optional[ExportConfig] = None
 
     @field_validator("transcribing")
     @classmethod

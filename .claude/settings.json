@@ -1,10 +1,18 @@
 {
-  "enabledPlugins": {
-    "obsidian@obsidian-skills": true
-  },
   "env": {
     "CLAUDE_CODE_SPAWN_BACKEND": "tmux"
   },
   "includeGitInstructions": false,
+  "permissions": {
+    "allow": [
+      "Bash(spectra --version)",
+      "Bash(spectra analyze *)",
+      "Bash(spectra validate *)",
+      "Bash(spectra park *)"
+    ]
+  },
+  "enabledPlugins": {
+    "obsidian@obsidian-skills": true
+  },
   "teammateMode": "tmux"
 }

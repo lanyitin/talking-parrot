@@ -96,3 +96,49 @@ class TestPipelineConfigUnknownFields:
     def test_vad_unknown_field_rejected(self):
         with pytest.raises(pydantic.ValidationError):
             VadConfig(activty_threshold=0.5)  # type: ignore — typo
+
+
+class TestPostProcessingConfigDefaults:
+    """Defaults required by D8 of implement-post-processing-stage."""
+
+    def test_merge_gap_threshold_ms_default(self):
+        """merge_gap_threshold_ms defaults to 200."""
+        assert PostProcessingConfig().merge_gap_threshold_ms == 200
+
+    def test_merge_max_duration_ms_default(self):
+        """merge_max_duration_ms defaults to 6000."""
+        assert PostProcessingConfig().merge_max_duration_ms == 6000
+
+    def test_split_max_duration_ms_default(self):
+        """split_max_duration_ms defaults to 6000."""
+        assert PostProcessingConfig().split_max_duration_ms == 6000
+
+    def test_legacy_yaml_without_new_fields_loads(self):
+        """A YAML-style dict missing the new fields still validates."""
+        cfg = PostProcessingConfig(
+            **{"enabled": True, "max_line_length": 42, "max_lines_per_subtitle": 2}
+        )
+        assert cfg.merge_gap_threshold_ms == 200
+        assert cfg.merge_max_duration_ms == 6000
+        assert cfg.split_max_duration_ms == 6000
+
+    def test_unknown_field_rejected(self):
+        """Extra keys are still forbidden after the additive change."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(unknown=1)  # type: ignore
+
+
+class TestPostProcessingConfigMergeLeSplitValidator:
+    """Validator from D7 / D8: merge_max_duration_ms <= split_max_duration_ms."""
+
+    def test_equal_values_accepted(self):
+        """Boundary case: merge == split is permitted."""
+        cfg = PostProcessingConfig(
+            merge_max_duration_ms=5000, split_max_duration_ms=5000
+        )
+        assert cfg.merge_max_duration_ms == 5000
+
+    def test_merge_greater_than_split_rejected(self):
+        """Validator raises when merge_max_duration_ms exceeds split_max_duration_ms."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(merge_max_duration_ms=8000, split_max_duration_ms=6000)
