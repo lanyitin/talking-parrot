@@ -75,6 +75,10 @@ class SubtitleExporter(abc.ABC):
             len(encoded),
         )
 
+        parent = os.path.dirname(output_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+
         with open(tmp_path, "wb") as fh:
             fh.write(encoded)
             fh.flush()
