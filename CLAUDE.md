@@ -27,7 +27,7 @@ discuss? → propose → apply ⇄ ingest → archive
 
 ## Parked Changes
 
-Changes can be parked (temporarily moved out of `openspec/changes/`). Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `/spectra-apply` and `/spectra-ingest` skills handle parked changes automatically.
+Changes can be parked (temporarily moved out of `docs/openspec/changes/`). Parked changes won't appear in `spectra list` but can be found with `spectra list --parked`. To restore: `spectra unpark <name>`. The `/spectra-apply` and `/spectra-ingest` skills handle parked changes automatically.
 
 <!-- SPECTRA:END -->
 
