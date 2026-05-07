@@ -86,6 +86,7 @@ All of the following must pass with zero errors:
 uv run pytest                   # full test suite — 100% green
 uv run ruff check .             # no lint errors
 uv run ruff format --check .    # no unformatted files
+uv run mypy src                 # type hint check
 ```
 
 ## Code Style
@@ -103,4 +104,4 @@ uv run ruff format --check .    # no unformatted files
 
 ## TODOs
 
-See @TODOs.md for more details.
+See @docs/TODOs.md for more details.

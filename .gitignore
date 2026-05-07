@@ -10,3 +10,7 @@ __pycache__/
 *.egg-info/
 dist/
 docs/openspec/.vector-search.db*
+
+# Local sample outputs
+/sample*.json
+/sample*.srt

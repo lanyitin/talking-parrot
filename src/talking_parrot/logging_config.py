@@ -52,7 +52,7 @@ def setup_logging(level_name: str | None = None) -> None:
     logging.basicConfig(
         stream=sys.stdout,
         level=level,
-        format="%(message)s",
+        format="%(asctime)s - %(message)s",
     )
     logging.getLogger().setLevel(level)
 

@@ -5,7 +5,7 @@
 - [X] `implement-transcription-stage`：實作 `TranscriptionStage`，整合 `FasterWhisperBackend`（Windows/Linux）與 `MLXWhisperBackend`（macOS），並以 `ConditionEvaluator` 實現級聯升級邏輯。
 - [X] `implement-alignment-stage`：實作 `AlignmentStage`，整合 `EnglishAlignmentBackend`（word-level wav2vec2）與 `JapaneseAlignmentBackend`（character-level），並實作 `AlignmentBackendFactory` 語言路由。
 - [X] `implement-post-processing-stage`：實作 `PostProcessingStage` 與六個 `SubtitleProcessor`（WordBoundaryMerge/Split、CharacterBoundaryMerge/Split、TimeBasedMerge/Split）及 `GranularityAwareProcessorFactory`。
-- [ ] `implement-subtitle-export`：實作 `SRTExporter` 與 `WebVTTExporter`，完成完整端對端 Pipeline 輸出流程。
+- [X] `implement-subtitle-export`：實作 `SRTExporter` 與 `WebVTTExporter`，完成完整端對端 Pipeline 輸出流程。
 
 ## 品質與工具
 
