@@ -1427,6 +1427,22 @@ wheels = [
 ]
 
 [[package]]
+name = "silero-vad"
+version = "6.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "torch", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.11.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "sys_platform != 'darwin'" },
+    { name = "torchaudio", version = "2.11.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "torchaudio", version = "2.11.0+cu126", source = { registry = "https://download.pytorch.org/whl/cu126" }, marker = "sys_platform != 'darwin'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/32/d3/e31f526482782764aa4f70e20fd4545cf2e4a81a60b6fb0f089f6d107991/silero_vad-6.2.1.tar.gz", hash = "sha256:b23062b0e39fad17b1266fc23c1e7b4290219dbe82ce08510889e32f681f4b3b", size = 28913811, upload-time = "2026-02-24T08:41:59.329Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/2b/48566f29a8b53d856ceb1994f209122749b3fda0a733a07e82047257de7a/silero_vad-6.2.1-py3-none-any.whl", hash = "sha256:09de93c4d874bb19c53e62a47dd38be5f163cedad2b5599583231f2a84ef79cb", size = 9146242, upload-time = "2026-02-24T08:41:56.955Z" },
+]
+
+[[package]]
 name = "structlog"
 version = "25.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1479,6 +1495,12 @@ faster-whisper = [
 mlx = [
     { name = "mlx-whisper" },
 ]
+silero = [
+    { name = "silero-vad" },
+]
+ten = [
+    { name = "ten-vad" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -1499,14 +1521,16 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.11" },
+    { name = "silero-vad", marker = "extra == 'silero'" },
     { name = "structlog", specifier = ">=24.0" },
+    { name = "ten-vad", marker = "extra == 'ten'", git = "https://github.com/TEN-framework/ten-vad.git" },
     { name = "torch", marker = "sys_platform == 'darwin' and extra == 'align'", specifier = ">=2.0" },
     { name = "torch", marker = "sys_platform != 'darwin' and extra == 'align'", specifier = ">=2.0", index = "https://download.pytorch.org/whl/cu126" },
     { name = "torchaudio", marker = "sys_platform == 'darwin' and extra == 'align'", specifier = ">=2.0" },
     { name = "torchaudio", marker = "sys_platform != 'darwin' and extra == 'align'", specifier = ">=2.0", index = "https://download.pytorch.org/whl/cu126" },
     { name = "transformers", marker = "extra == 'align'", specifier = ">=4.30" },
 ]
-provides-extras = ["faster-whisper", "mlx", "align", "dev"]
+provides-extras = ["faster-whisper", "mlx", "ten", "silero", "align", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1514,6 +1538,11 @@ dev = [
     { name = "ruff", specifier = ">=0.15.12" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260408" },
 ]
+
+[[package]]
+name = "ten-vad"
+version = "1.0.6.8"
+source = { git = "https://github.com/TEN-framework/ten-vad.git#22a3bcd4509d0faaa8eef4881e8af5f39c178950" }
 
 [[package]]
 name = "tiktoken"

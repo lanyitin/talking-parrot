@@ -21,6 +21,12 @@ faster-whisper = [
 mlx = [
     "mlx-whisper>=0.4",
 ]
+ten = [
+    "ten-vad"
+]
+silero = [
+    "silero_vad"
+]
 align = [
     "torch>=2.0",
     "torchaudio>=2.0",
