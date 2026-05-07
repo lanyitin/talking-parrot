@@ -67,7 +67,7 @@ class MLXWhisperBackend(TranscriptionBackend):
 
         audio_array = self._decode_chunk_window(audio_path, chunk, np)
 
-        logger.debug(
+        logger.info(
             "calling mlx_whisper.transcribe",
             path_or_hf_repo=model,
             language=language,
@@ -78,7 +78,7 @@ class MLXWhisperBackend(TranscriptionBackend):
             path_or_hf_repo=model,
             language=language,
         )
-        logger.debug(
+        logger.info(
             "mlx_whisper.transcribe returned",
             result_type=type(result_dict).__name__,
         )

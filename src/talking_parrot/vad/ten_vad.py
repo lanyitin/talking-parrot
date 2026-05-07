@@ -107,6 +107,7 @@ class TenVADBackend(VADBackend):
             return []
 
         instance = self._get_instance()
+
         frames: list[RawVadFrame] = []
 
         # ten_vad.TenVad.process expects np.ndarray[int16] of shape (hop_size,);

@@ -61,7 +61,8 @@ class FasterWhisperBackend(TranscriptionBackend):
 
         clip_start_s = chunk.start_ms / 1000
         clip_end_s = chunk.end_ms / 1000
-        logger.debug(
+
+        logger.info(
             "calling faster_whisper.WhisperModel.transcribe",
             audio_path=str(audio_path),
             language=language,
@@ -74,7 +75,7 @@ class FasterWhisperBackend(TranscriptionBackend):
             clip_timestamps=[clip_start_s, clip_end_s],
         )
         segments = list(segments_iter)
-        logger.debug(
+        logger.info(
             "faster_whisper.WhisperModel.transcribe returned",
             num_segments=len(segments),
             info_language=getattr(info, "language", None),

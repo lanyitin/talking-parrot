@@ -80,14 +80,14 @@ class JapaneseAlignmentBackend(AlignmentBackend):
         )
         input_values = proc_out.input_values.to(self._device)
 
-        logger.debug("calling Wav2Vec2ForCTC forward for JapaneseAlignmentBackend")
+        logger.info("calling Wav2Vec2ForCTC forward for JapaneseAlignmentBackend")
         model_out = self._model(input_values=input_values)
         logits = model_out.logits
         assert hasattr(logits, "shape"), (
             "Wav2Vec2ForCTC output has no .logits.shape — API may have changed"
         )
         emissions = self._torch.log_softmax(logits, dim=-1)
-        logger.debug(
+        logger.info(
             "Wav2Vec2ForCTC forward returned",
             logits_shape=tuple(logits.shape),
         )

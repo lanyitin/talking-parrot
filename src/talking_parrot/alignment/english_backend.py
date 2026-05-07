@@ -76,7 +76,7 @@ class EnglishAlignmentBackend(AlignmentBackend):
         transcript_tokens = self._prepare_tokens(transcript)
         audio_tensor = self._decode(audio_data)
 
-        logger.debug(
+        logger.info(
             "calling torchaudio model forward",
             num_samples=int(audio_tensor.shape[-1]),
         )
@@ -85,7 +85,7 @@ class EnglishAlignmentBackend(AlignmentBackend):
             "torchaudio model returned an object without .shape — API may have changed"
         )
         emissions = self._torch.log_softmax(emissions, dim=-1)
-        logger.debug(
+        logger.info(
             "torchaudio model forward returned",
             emissions_shape=tuple(emissions.shape),
         )

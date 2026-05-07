@@ -112,6 +112,7 @@ class SileroVADBackend(VADBackend):
             return []
 
         model = self._get_model()
+
         frames: list[RawVadFrame] = []
 
         for i in range(num_frames):
