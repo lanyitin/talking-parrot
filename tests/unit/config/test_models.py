@@ -8,6 +8,7 @@ from talking_parrot.config.models import (
     AlignConfig,
     PostProcessingConfig,
     TranscribingStep,
+    HallucinationFilterConfig,
 )
 
 
@@ -161,3 +162,291 @@ class TestPostProcessingConfigMergeLeSplitValidator:
         """Validator raises when merge_max_duration_ms exceeds split_max_duration_ms."""
         with pytest.raises(pydantic.ValidationError):
             PostProcessingConfig(merge_max_duration_ms=8000, split_max_duration_ms=6000)
+
+
+class TestHallucinationFilterConfigDefaults:
+    """Defaults required by the HallucinationFilterConfig schema requirement."""
+
+    def test_default_config_from_empty_dict(self):
+        """`HallucinationFilterConfig()` MUST produce all spec-defined defaults."""
+        cfg = HallucinationFilterConfig()
+        assert cfg.enabled is True
+        assert cfg.min_avg_logprob == -1.0
+        assert cfg.max_no_speech_prob == 0.6
+        assert cfg.max_compression_ratio == 2.4
+        assert cfg.max_repetition_ratio == 0.5
+        assert cfg.known_hallucination_phrases == [
+            "ご視聴ありがとうございました",
+            "ご視聴ありがとうございます",
+            "おやすみなさい",
+        ]
+        assert cfg.phrase_match_enabled is True
+        assert cfg.bracket_match_enabled is True
+        assert cfg.repeat_match_enabled is True
+        assert cfg.low_logprob_match_enabled is True
+        assert cfg.compression_match_enabled is True
+        assert cfg.repetition_match_enabled is True
+
+    def test_known_hallucination_phrases_default_factory_isolated(self):
+        """Two instances MUST NOT share the same list object (no mutable-default trap)."""
+        cfg_a = HallucinationFilterConfig()
+        cfg_b = HallucinationFilterConfig()
+        assert (
+            cfg_a.known_hallucination_phrases is not cfg_b.known_hallucination_phrases
+        )
+
+    def test_pipeline_config_with_empty_hallucination_filter_dict(self):
+        """`PipelineConfig` parses `hallucination_filter: {}` to a default model instance."""
+        cfg = PipelineConfig(
+            transcribing=[{"condition": "true", "backend": "faster-whisper"}],
+            hallucination_filter={},  # type: ignore[arg-type]
+        )
+        assert cfg.hallucination_filter is not None
+        assert cfg.hallucination_filter.enabled is True
+        assert cfg.hallucination_filter.min_avg_logprob == -1.0
+        assert cfg.hallucination_filter.max_no_speech_prob == 0.6
+        assert cfg.hallucination_filter.max_compression_ratio == 2.4
+        assert cfg.hallucination_filter.max_repetition_ratio == 0.5
+
+    def test_pipeline_config_missing_hallucination_filter_yields_none(self):
+        """When `hallucination_filter` key is omitted, the field MUST be `None`."""
+        cfg = PipelineConfig(
+            transcribing=[{"condition": "true", "backend": "faster-whisper"}],
+        )
+        assert cfg.hallucination_filter is None
+
+    def test_hallucination_filter_unknown_field_rejected(self):
+        """`extra='forbid'` is enforced on `HallucinationFilterConfig`."""
+        with pytest.raises(pydantic.ValidationError):
+            HallucinationFilterConfig(unknown=1)  # type: ignore[call-arg]
+
+
+class TestPostProcessingConfigDedupAndJapaneseFields:
+    """Defaults and validators for the dedup + Japanese fields requirement."""
+
+    def test_default_fields_populated(self):
+        """`PostProcessingConfig()` MUST expose all spec-defined defaults."""
+        cfg = PostProcessingConfig()
+        assert cfg.dedup_enabled is True
+        assert cfg.dedup_similarity_threshold == 0.9
+        assert cfg.dedup_max_gap_ms == 600
+        assert cfg.japanese_filler_enabled is True
+        assert cfg.japanese_repetition_enabled is True
+        assert cfg.japanese_filler_words == [
+            "あの",
+            "あのー",
+            "えっと",
+            "えーと",
+            "えー",
+            "まあ",
+            "そのー",
+            "その",
+            "なんか",
+            "ね",
+        ]
+        assert cfg.japanese_onomatopoeia_whitelist == [
+            "どきどき",
+            "わくわく",
+            "きらきら",
+            "ぴかぴか",
+        ]
+
+    def test_japanese_filler_words_default_factory_isolated(self):
+        """Two instances MUST NOT share the same filler-words list object."""
+        cfg_a = PostProcessingConfig()
+        cfg_b = PostProcessingConfig()
+        assert cfg_a.japanese_filler_words is not cfg_b.japanese_filler_words
+
+    def test_japanese_onomatopoeia_whitelist_default_factory_isolated(self):
+        """Two instances MUST NOT share the same onomatopoeia list object."""
+        cfg_a = PostProcessingConfig()
+        cfg_b = PostProcessingConfig()
+        assert (
+            cfg_a.japanese_onomatopoeia_whitelist
+            is not cfg_b.japanese_onomatopoeia_whitelist
+        )
+
+    def test_dedup_similarity_threshold_above_one_rejected(self):
+        """`dedup_similarity_threshold=1.5` MUST raise `ValidationError`."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(dedup_similarity_threshold=1.5)
+
+    def test_dedup_similarity_threshold_below_zero_rejected(self):
+        """Negative similarity threshold MUST raise `ValidationError`."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(dedup_similarity_threshold=-0.1)
+
+    def test_dedup_similarity_threshold_zero_accepted(self):
+        """Boundary: `dedup_similarity_threshold=0.0` MUST be accepted."""
+        cfg = PostProcessingConfig(dedup_similarity_threshold=0.0)
+        assert cfg.dedup_similarity_threshold == 0.0
+
+    def test_dedup_similarity_threshold_one_accepted(self):
+        """Boundary: `dedup_similarity_threshold=1.0` MUST be accepted."""
+        cfg = PostProcessingConfig(dedup_similarity_threshold=1.0)
+        assert cfg.dedup_similarity_threshold == 1.0
+
+    def test_dedup_max_gap_ms_negative_rejected(self):
+        """`dedup_max_gap_ms=-1` MUST raise `ValidationError`."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(dedup_max_gap_ms=-1)
+
+    def test_dedup_max_gap_ms_zero_accepted(self):
+        """Boundary: `dedup_max_gap_ms=0` MUST be accepted."""
+        cfg = PostProcessingConfig(dedup_max_gap_ms=0)
+        assert cfg.dedup_max_gap_ms == 0
+
+    def test_dedup_max_gap_ms_60000_accepted(self):
+        """Boundary: `dedup_max_gap_ms=60_000` (1 minute) MUST be accepted."""
+        cfg = PostProcessingConfig(dedup_max_gap_ms=60_000)
+        assert cfg.dedup_max_gap_ms == 60_000
+
+    def test_dedup_max_gap_ms_above_60000_rejected(self):
+        """`dedup_max_gap_ms=60_001` MUST raise `ValidationError`."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(dedup_max_gap_ms=60_001)
+
+
+class TestHallucinationFilterAllRulesDisabled:
+    """Reject `enabled=True` while every per-rule toggle is False (silent no-op guard)."""
+
+    def test_enabled_false_with_all_rules_false_accepted(self):
+        """`enabled=False` plus all rules off is the disabled-stage path; MUST be accepted."""
+        cfg = HallucinationFilterConfig(
+            enabled=False,
+            phrase_match_enabled=False,
+            bracket_match_enabled=False,
+            repeat_match_enabled=False,
+            low_logprob_match_enabled=False,
+            compression_match_enabled=False,
+            repetition_match_enabled=False,
+        )
+        assert cfg.enabled is False
+
+    def test_enabled_true_with_all_rules_false_rejected(self):
+        """`enabled=True` with every per-rule toggle False MUST raise `ValidationError`."""
+        with pytest.raises(pydantic.ValidationError):
+            HallucinationFilterConfig(
+                enabled=True,
+                phrase_match_enabled=False,
+                bracket_match_enabled=False,
+                repeat_match_enabled=False,
+                low_logprob_match_enabled=False,
+                compression_match_enabled=False,
+                repetition_match_enabled=False,
+            )
+
+    def test_enabled_true_with_one_rule_true_accepted(self):
+        """`enabled=True` with at least one per-rule toggle True MUST be accepted."""
+        cfg = HallucinationFilterConfig(
+            enabled=True,
+            phrase_match_enabled=True,
+            bracket_match_enabled=False,
+            repeat_match_enabled=False,
+            low_logprob_match_enabled=False,
+            compression_match_enabled=False,
+            repetition_match_enabled=False,
+        )
+        assert cfg.enabled is True
+        assert cfg.phrase_match_enabled is True
+
+
+class TestHallucinationFilterPhrasesCleanup:
+    """`known_hallucination_phrases` strips whitespace and drops empty entries."""
+
+    def test_empty_and_whitespace_entries_filtered(self):
+        """Empty and whitespace-only entries are dropped; valid entries are stripped."""
+        cfg = HallucinationFilterConfig(
+            known_hallucination_phrases=[
+                "",
+                "   ",
+                "ご視聴ありがとうございました",
+                "  hello  ",
+            ]
+        )
+        assert cfg.known_hallucination_phrases == [
+            "ご視聴ありがとうございました",
+            "hello",
+        ]
+
+    def test_empty_list_accepted_as_is(self):
+        """An explicit empty list overrides the default to disable phrase matching."""
+        cfg = HallucinationFilterConfig(known_hallucination_phrases=[])
+        assert cfg.known_hallucination_phrases == []
+
+    def test_default_list_unchanged(self):
+        """Default phrase list has no whitespace-only entries to strip."""
+        cfg = HallucinationFilterConfig()
+        assert cfg.known_hallucination_phrases == [
+            "ご視聴ありがとうございました",
+            "ご視聴ありがとうございます",
+            "おやすみなさい",
+        ]
+
+
+class TestPipelineConfigExpectedLanguageNormalisation:
+    """`PipelineConfig.expected_language` is normalised to canonical lowercase BCP-47 base tag."""
+
+    def test_lowercase_base_tag_unchanged(self):
+        """`expected_language='ja'` MUST be stored as `'ja'` (idempotent)."""
+        cfg = PipelineConfig(
+            expected_language="ja",
+            transcribing=[{"condition": "true", "backend": "faster-whisper"}],
+        )
+        assert cfg.expected_language == "ja"
+
+    def test_uppercase_base_tag_lowercased(self):
+        """`expected_language='JA'` MUST be normalised to `'ja'`."""
+        cfg = PipelineConfig(
+            expected_language="JA",
+            transcribing=[{"condition": "true", "backend": "faster-whisper"}],
+        )
+        assert cfg.expected_language == "ja"
+
+    def test_region_subtag_stripped(self):
+        """`expected_language='ja-JP'` MUST be normalised to `'ja'`."""
+        cfg = PipelineConfig(
+            expected_language="ja-JP",
+            transcribing=[{"condition": "true", "backend": "faster-whisper"}],
+        )
+        assert cfg.expected_language == "ja"
+
+    def test_whitespace_and_case_and_region_normalised(self):
+        """`expected_language='  En-US  '` MUST be normalised to `'en'`."""
+        cfg = PipelineConfig(
+            expected_language="  En-US  ",
+            transcribing=[{"condition": "true", "backend": "faster-whisper"}],
+        )
+        assert cfg.expected_language == "en"
+
+    def test_none_passes_through(self):
+        """`expected_language=None` MUST be stored as `None`."""
+        cfg = PipelineConfig(
+            expected_language=None,
+            transcribing=[{"condition": "true", "backend": "faster-whisper"}],
+        )
+        assert cfg.expected_language is None
+
+
+class TestHallucinationFilterConfigRoundtrip:
+    """Round-trip test for HallucinationFilterConfig (kept separate to preserve grouping)."""
+
+    def test_hallucination_filter_roundtrip(self):
+        """Model round-trip via `model_dump()`/re-instantiation preserves all fields."""
+        cfg = HallucinationFilterConfig(
+            enabled=False,
+            min_avg_logprob=-0.5,
+            max_no_speech_prob=0.7,
+            max_compression_ratio=2.0,
+            max_repetition_ratio=0.3,
+            known_hallucination_phrases=["foo", "bar"],
+            phrase_match_enabled=False,
+            bracket_match_enabled=False,
+            repeat_match_enabled=False,
+            low_logprob_match_enabled=False,
+            compression_match_enabled=False,
+            repetition_match_enabled=False,
+        )
+        dumped = cfg.model_dump()
+        restored = HallucinationFilterConfig(**dumped)
+        assert restored == cfg

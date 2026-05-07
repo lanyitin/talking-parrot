@@ -90,6 +90,34 @@ class TestConfigLoaderRejectsUnknownFields:
         with pytest.raises(pydantic.ValidationError):
             ConfigLoader.load(str(f))
 
+    def test_post_processing_unknown_field_raises(self, tmp_path):
+        """Unknown key inside ``post_processing`` (e.g. typo) MUST be rejected."""
+        yaml = textwrap.dedent("""\
+            transcribing:
+              - condition: "true"
+                backend: faster-whisper
+            post_processing:
+              dedup_enabledd: true
+            """)
+        f = tmp_path / "config.yaml"
+        f.write_text(yaml)
+        with pytest.raises(pydantic.ValidationError):
+            ConfigLoader.load(str(f))
+
+    def test_hallucination_filter_unknown_field_raises(self, tmp_path):
+        """Unknown key inside ``hallucination_filter`` MUST be rejected."""
+        yaml = textwrap.dedent("""\
+            transcribing:
+              - condition: "true"
+                backend: faster-whisper
+            hallucination_filter:
+              bogus: true
+            """)
+        f = tmp_path / "config.yaml"
+        f.write_text(yaml)
+        with pytest.raises(pydantic.ValidationError):
+            ConfigLoader.load(str(f))
+
 
 class TestFirstTranscribingCondition:
     def test_non_true_first_condition_raises(self, tmp_path):

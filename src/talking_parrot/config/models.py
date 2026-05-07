@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class VadConfig(BaseModel):
@@ -91,6 +91,21 @@ class PostProcessingConfig(BaseModel):
             cue that Split would then need to break apart.
         split_max_duration_ms: A cue whose duration exceeds this many
             milliseconds is split into multiple cues.
+        dedup_enabled: Toggle for the segment-level deduplication sub-stage.
+        dedup_similarity_threshold: Similarity ratio in the closed interval
+            ``[0.0, 1.0]`` above which two adjacent segments are considered
+            near-duplicates and eligible for deduplication.
+        dedup_max_gap_ms: Maximum inter-segment gap (in milliseconds, must be
+            ``>= 0``) within which two near-duplicate segments may be merged
+            by the dedup sub-stage.
+        japanese_filler_enabled: Toggle for the Japanese filler-word stripping
+            sub-stage.
+        japanese_repetition_enabled: Toggle for the Japanese intra-segment
+            repetition collapsing sub-stage.
+        japanese_filler_words: List of Japanese filler tokens to strip when
+            ``japanese_filler_enabled`` is true.
+        japanese_onomatopoeia_whitelist: Onomatopoeia tokens that are exempt
+            from the Japanese repetition collapsing rule.
     """
 
     model_config = {"extra": "forbid"}
@@ -101,6 +116,60 @@ class PostProcessingConfig(BaseModel):
     merge_gap_threshold_ms: int = 200
     merge_max_duration_ms: int = 6000
     split_max_duration_ms: int = 6000
+    dedup_enabled: bool = True
+    dedup_similarity_threshold: float = 0.9
+    dedup_max_gap_ms: int = 600
+    japanese_filler_enabled: bool = True
+    japanese_repetition_enabled: bool = True
+    japanese_filler_words: list[str] = Field(
+        default_factory=lambda: [
+            "あの",
+            "あのー",
+            "えっと",
+            "えーと",
+            "えー",
+            "まあ",
+            "そのー",
+            "その",
+            "なんか",
+            "ね",
+        ]
+    )
+    japanese_onomatopoeia_whitelist: list[str] = Field(
+        default_factory=lambda: [
+            "どきどき",
+            "わくわく",
+            "きらきら",
+            "ぴかぴか",
+        ]
+    )
+
+    @field_validator("dedup_similarity_threshold")
+    @classmethod
+    def _dedup_similarity_threshold_in_unit_interval(cls, v: float) -> float:
+        """Validate that ``dedup_similarity_threshold`` lies in ``[0.0, 1.0]``."""
+        if not (0.0 <= v <= 1.0):
+            raise ValueError(
+                f"dedup_similarity_threshold ({v}) must be in the closed "
+                "interval [0.0, 1.0]"
+            )
+        return v
+
+    @field_validator("dedup_max_gap_ms")
+    @classmethod
+    def _dedup_max_gap_ms_non_negative(cls, v: int) -> int:
+        """Validate that ``dedup_max_gap_ms`` is in ``[0, 60_000]`` ms.
+
+        Lower bound guards against negative gaps. Upper bound guards
+        against typos like ``600000`` (10 min) where the operator likely
+        meant ``600`` ms — without a cap, the dedup stage would merge
+        cues across huge silences.
+        """
+        if v < 0:
+            raise ValueError(f"dedup_max_gap_ms ({v}) must be >= 0")
+        if v > 60_000:
+            raise ValueError(f"dedup_max_gap_ms must be <= 60000 (1 minute); got {v}")
+        return v
 
     @model_validator(mode="after")
     def _validate_merge_le_split(self) -> "PostProcessingConfig":
@@ -110,6 +179,94 @@ class PostProcessingConfig(BaseModel):
                 "merge_max_duration_ms "
                 f"({self.merge_max_duration_ms}) must be <= "
                 f"split_max_duration_ms ({self.split_max_duration_ms})"
+            )
+        return self
+
+
+class HallucinationFilterConfig(BaseModel):
+    """Configuration for the hallucination-filter post-processing stage.
+
+    Attributes:
+        enabled: Whether the hallucination-filter stage is active.
+        min_avg_logprob: Segments whose ``avg_logprob`` falls below this threshold
+            are flagged by the low-logprob rule.
+        max_no_speech_prob: Segments whose ``no_speech_prob`` exceeds this threshold
+            are flagged by the no-speech rule.
+        max_compression_ratio: Segments whose ``compression_ratio`` exceeds this
+            threshold are flagged by the compression rule.
+        max_repetition_ratio: Segments whose intra-segment repetition ratio exceeds
+            this threshold are flagged by the repetition rule.
+        known_hallucination_phrases: Exact-match phrases known to be Whisper
+            hallucinations. Default list copied from the audio2subtitle reference;
+            project allows override via YAML.
+        phrase_match_enabled: Toggle for the known-phrase exact-match rule.
+        bracket_match_enabled: Toggle for the bracket-content rule.
+        repeat_match_enabled: Toggle for the cross-segment repeat rule.
+        low_logprob_match_enabled: Toggle for the low-logprob rule.
+        compression_match_enabled: Toggle for the compression-ratio rule.
+        repetition_match_enabled: Toggle for the intra-segment repetition rule.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    enabled: bool = True
+    min_avg_logprob: float = -1.0
+    max_no_speech_prob: float = 0.6
+    max_compression_ratio: float = 2.4
+    max_repetition_ratio: float = 0.5
+    known_hallucination_phrases: list[str] = Field(
+        default_factory=lambda: [
+            "ご視聴ありがとうございました",
+            "ご視聴ありがとうございます",
+            "おやすみなさい",
+        ]
+    )
+    phrase_match_enabled: bool = True
+    bracket_match_enabled: bool = True
+    repeat_match_enabled: bool = True
+    low_logprob_match_enabled: bool = True
+    compression_match_enabled: bool = True
+    repetition_match_enabled: bool = True
+
+    @field_validator("known_hallucination_phrases")
+    @classmethod
+    def _strip_and_drop_empty_phrases(cls, v: list[str]) -> list[str]:
+        """Strip surrounding whitespace and drop empty/whitespace-only entries.
+
+        Empty entries in the phrase list are almost always config typos and
+        would cause the phrase rule to flag any cue whose text strips to
+        empty. Silently filter them out rather than raising — a stray empty
+        string in a long phrase list shouldn't blow up the whole load.
+        """
+        return [stripped for entry in v if (stripped := entry.strip())]
+
+    @model_validator(mode="after")
+    def _validate_at_least_one_rule_when_enabled(
+        self,
+    ) -> "HallucinationFilterConfig":
+        """Reject ``enabled=True`` while every per-rule toggle is False.
+
+        Such a configuration produces a stage that emits "filter ran" logs
+        but drops nothing — a silent no-op. The user almost certainly meant
+        either to disable the stage entirely (``enabled=False``) or to
+        leave at least one rule on.
+        """
+        if self.enabled and not (
+            self.phrase_match_enabled
+            or self.bracket_match_enabled
+            or self.repeat_match_enabled
+            or self.low_logprob_match_enabled
+            or self.compression_match_enabled
+            or self.repetition_match_enabled
+        ):
+            raise ValueError(
+                "HallucinationFilterConfig.enabled is True but all six "
+                "per-rule toggles are False — at least one of "
+                "phrase_match_enabled / bracket_match_enabled / "
+                "repeat_match_enabled / low_logprob_match_enabled / "
+                "compression_match_enabled / repetition_match_enabled "
+                "must be True (or set enabled=False to disable the stage "
+                "entirely)."
             )
         return self
 
@@ -146,6 +303,7 @@ class PipelineConfig(BaseModel):
     transcribing: list[TranscribingStep]
     align: Optional[AlignConfig] = None
     post_processing: Optional[PostProcessingConfig] = None
+    hallucination_filter: Optional[HallucinationFilterConfig] = None
     export: Optional[ExportConfig] = None
 
     @field_validator("transcribing")
@@ -156,3 +314,22 @@ class PipelineConfig(BaseModel):
         if not v:
             raise ValueError("transcribing must be a non-empty list")
         return v
+
+    @field_validator("expected_language")
+    @classmethod
+    def _normalise_expected_language(cls, v: Optional[str]) -> Optional[str]:
+        """Normalise to canonical lowercase BCP-47 base tag.
+
+        - ``None`` passes through unchanged.
+        - Surrounding whitespace is stripped.
+        - The value is lowercased.
+        - Only the part before the first ``-`` is kept (e.g. ``ja-JP`` ->
+          ``ja``).
+
+        Whole-word strings like ``japanese`` are NOT mapped to ``ja``;
+        callers MUST use BCP-47 base tags. The normalisation here is
+        idempotent — re-validating an already-normalised value is a no-op.
+        """
+        if v is None:
+            return None
+        return v.strip().lower().split("-", 1)[0]
