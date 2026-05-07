@@ -28,6 +28,7 @@ from talking_parrot.config.models import (
     AlignConfig,
     ChunkingConfig,
     ExportConfig,
+    HallucinationFilterConfig,
     PipelineConfig,
     PostProcessingConfig,
     TranscribingStep,
@@ -41,6 +42,7 @@ from talking_parrot.stages import (
     PostProcessingStage,
     TranscriptionStage,
 )
+from talking_parrot.stages.hallucination_filter_stage import HallucinationFilterStage
 from talking_parrot.stages.vad_stage import VADStage
 
 
@@ -55,8 +57,17 @@ def _full_cfg() -> PipelineConfig:
         vad=VadConfig(),
         chunking=ChunkingConfig(),
         transcribing=[TranscribingStep(condition="true", backend="faster-whisper")],
+        hallucination_filter=HallucinationFilterConfig(),
         align=AlignConfig(),
         post_processing=PostProcessingConfig(),
+    )
+
+
+def _hallucination_only_cfg() -> PipelineConfig:
+    """Config with only transcribing + hallucination_filter (no vad/chunking/align)."""
+    return PipelineConfig(
+        transcribing=[TranscribingStep(condition="true", backend="faster-whisper")],
+        hallucination_filter=HallucinationFilterConfig(),
     )
 
 
@@ -109,7 +120,7 @@ class TestBuildStagesShape:
 
         assert [type(s) for s in stages] == [TranscriptionStage, PostProcessingStage]
 
-    def test_full_config_yields_five_stages_in_order(self) -> None:
+    def test_full_config_yields_six_stages_in_order(self) -> None:
         patches = _patch_heavy_constructors()
         _enter_all(patches)
         try:
@@ -121,7 +132,24 @@ class TestBuildStagesShape:
             VADStage,
             ChunkingStage,
             TranscriptionStage,
+            HallucinationFilterStage,
             AlignmentStage,
+            PostProcessingStage,
+        ]
+
+    def test_hallucination_filter_inserted_before_post_processing_when_align_none(
+        self,
+    ) -> None:
+        patches = _patch_heavy_constructors()
+        _enter_all(patches)
+        try:
+            stages = cli._build_stages(_hallucination_only_cfg(), media_path="x.mp4")
+        finally:
+            _exit_all(patches)
+
+        assert [type(s) for s in stages] == [
+            TranscriptionStage,
+            HallucinationFilterStage,
             PostProcessingStage,
         ]
 

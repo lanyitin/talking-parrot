@@ -46,6 +46,7 @@ from talking_parrot.stages import (
     PostProcessingStage,
     TranscriptionStage,
 )
+from talking_parrot.stages.hallucination_filter_stage import HallucinationFilterStage
 from talking_parrot.stages.vad_stage import VADStage
 from talking_parrot.transcription.factory import TranscriptionBackendFactory
 from talking_parrot.vad.silero_vad import SileroVADBackend
@@ -70,8 +71,13 @@ def _build_stages(
     1. ``VADStage`` — only when ``cfg.vad is not None``.
     2. ``ChunkingStage`` — only when ``cfg.chunking is not None``.
     3. ``TranscriptionStage`` — always.
-    4. ``AlignmentStage`` — only when ``cfg.align is not None``.
-    5. ``PostProcessingStage`` — always.
+    4. ``HallucinationFilterStage`` — only when
+       ``cfg.hallucination_filter is not None``. Inserted between
+       transcription and alignment so downstream stages observe a filtered
+       ``transcription_results``; when ``cfg.align is None`` it falls
+       naturally between transcription and post-processing.
+    5. ``AlignmentStage`` — only when ``cfg.align is not None``.
+    6. ``PostProcessingStage`` — always.
 
     The function delegates to existing factories / backend constructors; it
     does NOT introduce any new wiring code beyond what already exists in the
@@ -104,6 +110,9 @@ def _build_stages(
             evaluator=condition_evaluator,
         )
     )
+
+    if cfg.hallucination_filter is not None:
+        stages.append(HallucinationFilterStage(cfg.hallucination_filter))
 
     if cfg.align is not None:
         alignment_factory = AlignmentBackendFactory()
