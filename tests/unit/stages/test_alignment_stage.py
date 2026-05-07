@@ -294,20 +294,59 @@ def test_granularity_string_parsed_case_insensitively(
 # ---------------------------------------------------------------------------
 
 
-def test_timestamps_shifted_by_chunk_start() -> None:
-    """A chunk at start_ms=10000 with token (100..500) MUST yield (10100..10500)."""
+def test_timestamps_shifted_by_result_start_not_chunk_start() -> None:
+    """Tokens MUST be shifted by ``result.start_ms`` (the segment), not the parent chunk's start.
+
+    GIVEN a TranscriptionResult with start_ms=12_500, end_ms=14_000 whose parent
+    chunk is (10_000..20_000), and a backend returning a token (100..500),
+    THEN the absolute token MUST be (12_600..13_000) AND the audio_reader MUST
+    have been called with (12_500, 14_000), not (10_000, 20_000).
+    """
     backend = _FakeAlignmentBackend(
         tokens_per_call=[[AlignedToken(word="hi", start_ms=100, end_ms=500, score=0.9)]]
     )
     factory = _FakeFactory(backend=backend)
-    stage = AlignmentStage(factory, _StubAudioReader())
-    chunks = [Chunk(index=0, start_ms=10_000, end_ms=12_000)]
-    results = [_make_result(0, 10_000, 12_000, "hi")]
+    audio_reader = _StubAudioReader()
+    stage = AlignmentStage(factory, audio_reader)
+    chunks = [Chunk(index=0, start_ms=10_000, end_ms=20_000)]
+    results = [_make_result(0, 12_500, 14_000, "hi")]
     ctx = _make_ctx(chunks=chunks, transcription_results=results)
     out = stage.process(ctx)
     tok = out.transcription_results[0].aligned_tokens[0]
-    assert tok.start_ms == 10_100
-    assert tok.end_ms == 10_500
+    assert tok.start_ms == 12_600
+    assert tok.end_ms == 13_000
+    assert audio_reader.read_calls == [(12_500, 14_000)]
+
+
+def test_multiple_segments_from_one_chunk_aligned_independently() -> None:
+    """Two segments sharing one chunk_index MUST each read their own bounds and shift by their own start_ms."""
+    backend = _FakeAlignmentBackend(
+        tokens_per_call=[
+            [AlignedToken(word="a", start_ms=50, end_ms=200, score=0.9)],
+            [AlignedToken(word="b", start_ms=10, end_ms=300, score=0.9)],
+        ]
+    )
+    factory = _FakeFactory(backend=backend)
+    audio_reader = _StubAudioReader()
+    stage = AlignmentStage(factory, audio_reader)
+    chunks = [Chunk(index=0, start_ms=10_000, end_ms=20_000)]
+    results = [
+        _make_result(0, 12_000, 13_000, "a"),
+        _make_result(0, 13_500, 14_500, "b"),
+    ]
+    ctx = _make_ctx(chunks=chunks, transcription_results=results)
+    out = stage.process(ctx)
+
+    # Audio reader MUST have been called with each segment's own bounds.
+    assert audio_reader.read_calls == [(12_000, 13_000), (13_500, 14_500)]
+
+    # Token shift MUST use each result's own start_ms, not the shared chunk's.
+    tok0 = out.transcription_results[0].aligned_tokens[0]
+    tok1 = out.transcription_results[1].aligned_tokens[0]
+    assert tok0.start_ms == 12_050
+    assert tok0.end_ms == 12_200
+    assert tok1.start_ms == 13_510
+    assert tok1.end_ms == 13_800
 
 
 # ---------------------------------------------------------------------------

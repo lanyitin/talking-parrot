@@ -14,19 +14,20 @@ to a float32 numpy array scaled to ``[-1.0, 1.0]`` for the model.
 from __future__ import annotations
 
 import importlib
-import structlog
 import platform
 import sys
 from pathlib import Path
 from typing import Any
 
+import structlog
+
 from talking_parrot.io.audio_decoder import FfmpegAudioReader
 from talking_parrot.models.chunk import Chunk
 from talking_parrot.models.transcription import (
+    TranscriptionMetrics,
     TranscriptionResult,
 )
 from talking_parrot.transcription.backend import TranscriptionBackend
-from talking_parrot.transcription.faster_whisper_backend import _compute_metrics
 
 logger = structlog.get_logger(__name__)
 
@@ -56,11 +57,13 @@ class MLXWhisperBackend(TranscriptionBackend):
         chunk: Chunk,
         model: str,
         language: str | None,
-    ) -> TranscriptionResult:
-        """Decode the chunk window via audio-io and dispatch to ``mlx_whisper.transcribe``.
+    ) -> list[TranscriptionResult]:
+        """Decode the chunk window and emit one ``TranscriptionResult`` per segment dict.
 
         The ``model`` string is passed verbatim to ``path_or_hf_repo`` — no
-        magical translation is performed.
+        magical translation is performed. Returns ``[]`` when the underlying
+        dict has an empty ``segments`` list — callers MUST treat this as a
+        valid no-op outcome (per the ``transcription-backend`` contract).
         """
         np = self._import_numpy()
         mlx_whisper = self._import_mlx_whisper()
@@ -93,21 +96,34 @@ class MLXWhisperBackend(TranscriptionBackend):
         )
 
         segments = list(result_dict["segments"])
-        text = " ".join(_segment_text(seg) for seg in segments).strip()
-        metrics = _compute_metrics([_DictSegmentAdapter(seg) for seg in segments], text)
 
-        result_language = result_dict.get("language") or language or ""
+        dict_language = result_dict.get("language")
+        result_language = dict_language if dict_language is not None else language
 
-        return TranscriptionResult(
-            chunk_index=chunk.index,
-            start_ms=chunk.start_ms,
-            end_ms=chunk.end_ms,
-            text=text,
-            language=result_language,
-            model_used=model,
-            metrics=metrics,
-            aligned_tokens=None,
-        )
+        results: list[TranscriptionResult] = []
+        for seg in segments:
+            seg_text = (seg.get("text") or "").strip()
+            start_ms = chunk.start_ms + int(round(seg["start"] * 1000))
+            end_ms = chunk.start_ms + int(round(seg["end"] * 1000))
+            metrics = TranscriptionMetrics(
+                avg_logprob=seg["avg_logprob"],
+                compression_ratio=seg["compression_ratio"],
+                no_speech_prob=seg["no_speech_prob"],
+                repetition_ratio=_segment_repetition_ratio(seg_text),
+            )
+            results.append(
+                TranscriptionResult(
+                    chunk_index=chunk.index,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    text=seg_text,
+                    language=result_language,  # type: ignore[arg-type]
+                    model_used=model,
+                    metrics=metrics,
+                    aligned_tokens=None,
+                )
+            )
+        return results
 
     @staticmethod
     def _decode_chunk_window(audio_path: Path, chunk: Chunk, np: Any) -> Any:
@@ -170,34 +186,9 @@ class MLXWhisperBackend(TranscriptionBackend):
         return np
 
 
-def _segment_text(seg: Any) -> str:
-    """Extract the text field from an mlx_whisper segment (dict or attribute object)."""
-    if isinstance(seg, dict):
-        return seg.get("text", "")
-    return getattr(seg, "text", "")
-
-
-class _DictSegmentAdapter:
-    """Adapt a dict-shaped mlx_whisper segment to attribute access for ``_compute_metrics``.
-
-    ``_compute_metrics`` expects ``.start``, ``.end``, ``.avg_logprob``,
-    ``.compression_ratio``, ``.no_speech_prob`` attributes.
-    """
-
-    __slots__ = (
-        "start",
-        "end",
-        "text",
-        "avg_logprob",
-        "compression_ratio",
-        "no_speech_prob",
-    )
-
-    def __init__(self, seg: dict) -> None:
-        """Capture the relevant fields, defaulting missing entries to ``0.0``."""
-        self.start = float(seg.get("start", 0.0))
-        self.end = float(seg.get("end", 0.0))
-        self.text = str(seg.get("text", ""))
-        self.avg_logprob = float(seg.get("avg_logprob", 0.0))
-        self.compression_ratio = float(seg.get("compression_ratio", 0.0))
-        self.no_speech_prob = float(seg.get("no_speech_prob", 0.0))
+def _segment_repetition_ratio(text: str) -> float:
+    """Return ``1 - unique/total`` over whitespace-split tokens; ``0.0`` if empty."""
+    tokens = text.split()
+    if not tokens:
+        return 0.0
+    return 1.0 - (len(set(tokens)) / len(tokens))

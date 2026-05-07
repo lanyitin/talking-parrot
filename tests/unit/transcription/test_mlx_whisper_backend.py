@@ -121,6 +121,14 @@ def _segment_dict(
     }
 
 
+def _fake_reader(sample_rate: int = 16000, num_samples: int = 32000) -> MagicMock:
+    """Return a MagicMock standing in for ``FfmpegAudioReader``."""
+    reader = MagicMock()
+    reader.sample_rate = sample_rate
+    reader.read.return_value = b"\x00\x00" * num_samples
+    return reader
+
+
 # ---------------------------------------------------------------------------
 # Construction tests
 # ---------------------------------------------------------------------------
@@ -185,9 +193,7 @@ def test_missing_dependency_raises_actionable_import_error() -> None:
     # Provide fake numpy so import of numpy succeeds before mlx_whisper.
     _install_fake_numpy(buffer_length=32000)
 
-    fake_reader = MagicMock()
-    fake_reader.sample_rate = 16000
-    fake_reader.read.return_value = b"\x00" * 64000
+    fake_reader = _fake_reader(num_samples=32000)
 
     with patch(
         "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
@@ -221,9 +227,7 @@ def test_chunk_window_numpy_length_and_path_or_hf_repo_verbatim() -> None:
         transcribe_return={"segments": [], "language": "en"}
     )
 
-    fake_reader = MagicMock()
-    fake_reader.sample_rate = sample_rate
-    fake_reader.read.return_value = b"\x00\x00" * expected_samples  # int16 bytes
+    fake_reader = _fake_reader(sample_rate=sample_rate, num_samples=expected_samples)
 
     backend = MLXWhisperBackend()
     chunk = _make_chunk(start_ms=2000, end_ms=4000)
@@ -240,73 +244,229 @@ def test_chunk_window_numpy_length_and_path_or_hf_repo_verbatim() -> None:
     assert kwargs["path_or_hf_repo"] == "large-v3"
 
 
-def test_language_from_dict_surfaces() -> None:
-    """``language="en"`` from returned dict MUST surface as ``result.language``."""
-    from talking_parrot.transcription.mlx_whisper_backend import (
-        MLXWhisperBackend,
-    )
-
-    _install_fake_numpy(buffer_length=32000)
-    _install_fake_mlx_whisper(transcribe_return={"segments": [], "language": "en"})
-    fake_reader = MagicMock()
-    fake_reader.sample_rate = 16000
-    fake_reader.read.return_value = b"\x00\x00" * 32000
-
-    backend = MLXWhisperBackend()
-    chunk = _make_chunk()
-
-    with patch(
-        "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
-        return_value=fake_reader,
-    ):
-        result = backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
-
-    assert result.language == "en"
-
-
-def test_metrics_match_faster_whisper_examples() -> None:
-    """Weighted-mean avg_logprob -0.2, max no_speech_prob 0.40, empty repetition_ratio 0.0."""
+def test_returns_one_result_per_segment_with_stripped_text() -> None:
+    """Two segments ``" hello"``/``" world "`` MUST yield two results with stripped text."""
     from talking_parrot.transcription.mlx_whisper_backend import (
         MLXWhisperBackend,
     )
 
     segs = [
-        _segment_dict(0.0, 1.0, "a", avg_logprob=-0.5, no_speech_prob=0.05),
-        _segment_dict(1.0, 4.0, "b", avg_logprob=-0.1, no_speech_prob=0.40),
+        _segment_dict(0.0, 2.0, " hello"),
+        _segment_dict(2.5, 5.0, " world "),
     ]
     _install_fake_numpy(buffer_length=32000)
     _install_fake_mlx_whisper(transcribe_return={"segments": segs, "language": "en"})
-    fake_reader = MagicMock()
-    fake_reader.sample_rate = 16000
-    fake_reader.read.return_value = b"\x00\x00" * 32000
 
     backend = MLXWhisperBackend()
     chunk = _make_chunk()
 
     with patch(
         "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
-        return_value=fake_reader,
+        return_value=_fake_reader(),
     ):
-        result = backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
+        results = backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
 
-    # Drop fake numpy before using pytest.approx (which probes numpy).
-    sys.modules.pop("numpy", None)
+    assert isinstance(results, list)
+    assert len(results) == 2
+    assert results[0].text == "hello"
+    assert results[1].text == "world"
 
-    assert abs(result.metrics.avg_logprob - (-0.2)) < 1e-9
-    assert abs(result.metrics.no_speech_prob - 0.40) < 1e-9
 
-    # Empty-text repetition_ratio case (re-fresh fakes)
-    sys.modules.pop("mlx_whisper", None)
+def test_language_from_dict_surfaces_on_each_result() -> None:
+    """``language="en"`` from returned dict MUST surface on every per-segment result."""
+    from talking_parrot.transcription.mlx_whisper_backend import (
+        MLXWhisperBackend,
+    )
+
+    segs = [
+        _segment_dict(0.0, 1.0, "a"),
+        _segment_dict(1.0, 2.0, "b"),
+        _segment_dict(2.0, 3.0, "c"),
+    ]
     _install_fake_numpy(buffer_length=32000)
-    _install_fake_mlx_whisper(transcribe_return={"segments": [], "language": "en"})
-    fake_reader2 = MagicMock()
-    fake_reader2.sample_rate = 16000
-    fake_reader2.read.return_value = b"\x00\x00" * 32000
-    backend2 = MLXWhisperBackend()
+    _install_fake_mlx_whisper(transcribe_return={"segments": segs, "language": "en"})
+
+    backend = MLXWhisperBackend()
+    chunk = _make_chunk()
+
     with patch(
         "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
-        return_value=fake_reader2,
+        return_value=_fake_reader(),
     ):
-        result2 = backend2.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
-    assert result2.metrics.repetition_ratio == 0.0
-    assert result2.text == ""
+        results = backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
+
+    assert len(results) == 3
+    for r in results:
+        assert r.language == "en"
+
+
+def test_language_falls_back_to_argument_when_missing() -> None:
+    """Dict missing ``language`` MUST fall back to the supplied ``language`` argument."""
+    from talking_parrot.transcription.mlx_whisper_backend import (
+        MLXWhisperBackend,
+    )
+
+    segs = [_segment_dict(0.0, 1.0, "hi")]
+    _install_fake_numpy(buffer_length=32000)
+    _install_fake_mlx_whisper(transcribe_return={"segments": segs})
+
+    backend = MLXWhisperBackend()
+    chunk = _make_chunk()
+
+    with patch(
+        "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
+        return_value=_fake_reader(),
+    ):
+        results = backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
+
+    assert len(results) == 1
+    # supplied language was None, dict had no language key → result.language is None
+    assert results[0].language is None
+
+
+def test_per_segment_metrics_are_raw_not_aggregated() -> None:
+    """Each result MUST carry its own raw avg_logprob/compression_ratio/no_speech_prob."""
+    from talking_parrot.transcription.mlx_whisper_backend import (
+        MLXWhisperBackend,
+    )
+
+    segs = [
+        _segment_dict(
+            0.0,
+            1.0,
+            "a",
+            avg_logprob=-0.5,
+            compression_ratio=1.2,
+            no_speech_prob=0.05,
+        ),
+        _segment_dict(
+            1.0,
+            4.0,
+            "b",
+            avg_logprob=-0.1,
+            compression_ratio=1.8,
+            no_speech_prob=0.40,
+        ),
+    ]
+    _install_fake_numpy(buffer_length=32000)
+    _install_fake_mlx_whisper(transcribe_return={"segments": segs, "language": "en"})
+
+    backend = MLXWhisperBackend()
+    chunk = _make_chunk()
+
+    with patch(
+        "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
+        return_value=_fake_reader(),
+    ):
+        results = backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
+
+    assert results[0].metrics.avg_logprob == -0.5
+    assert results[0].metrics.compression_ratio == 1.2
+    assert results[0].metrics.no_speech_prob == 0.05
+    assert results[1].metrics.avg_logprob == -0.1
+    assert results[1].metrics.compression_ratio == 1.8
+    assert results[1].metrics.no_speech_prob == 0.40
+
+
+def test_segment_derived_timestamps() -> None:
+    """``start_ms``/``end_ms`` MUST be ``chunk.start_ms + int(round(seg.start*1000))``."""
+    from talking_parrot.transcription.mlx_whisper_backend import (
+        MLXWhisperBackend,
+    )
+
+    segs = [_segment_dict(0.0, 2.0, "hello")]
+    _install_fake_numpy(buffer_length=32000)
+    _install_fake_mlx_whisper(transcribe_return={"segments": segs, "language": "en"})
+
+    backend = MLXWhisperBackend()
+    chunk = _make_chunk(index=4, start_ms=10000, end_ms=20000)
+
+    with patch(
+        "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
+        return_value=_fake_reader(),
+    ):
+        results = backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
+
+    assert len(results) == 1
+    assert results[0].chunk_index == 4
+    assert results[0].start_ms == 10000
+    assert results[0].end_ms == 12000
+    assert results[0].aligned_tokens is None
+
+
+def test_empty_segments_list_returns_empty_list() -> None:
+    """Dict with ``segments=[]`` MUST yield an empty list (no error)."""
+    from talking_parrot.transcription.mlx_whisper_backend import (
+        MLXWhisperBackend,
+    )
+
+    _install_fake_numpy(buffer_length=32000)
+    _install_fake_mlx_whisper(transcribe_return={"segments": [], "language": "en"})
+
+    backend = MLXWhisperBackend()
+    chunk = _make_chunk()
+
+    with patch(
+        "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
+        return_value=_fake_reader(),
+    ):
+        results = backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
+
+    assert results == []
+
+
+@pytest.mark.parametrize(
+    "text,expected_ratio",
+    [
+        ("hello hello world", 1 / 3),
+        ("a b c", 0.0),
+        ("", 0.0),
+        ("x x x x", 0.75),
+    ],
+)
+def test_repetition_ratio_per_segment(text: str, expected_ratio: float) -> None:
+    """``repetition_ratio`` MUST be computed from each segment's stripped text."""
+    from talking_parrot.transcription.mlx_whisper_backend import (
+        MLXWhisperBackend,
+    )
+
+    segs = [_segment_dict(0.0, 1.0, text)]
+    _install_fake_numpy(buffer_length=32000)
+    _install_fake_mlx_whisper(transcribe_return={"segments": segs, "language": "en"})
+
+    backend = MLXWhisperBackend()
+    chunk = _make_chunk()
+
+    with patch(
+        "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
+        return_value=_fake_reader(),
+    ):
+        results = backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
+
+    assert len(results) == 1
+    assert abs(results[0].metrics.repetition_ratio - expected_ratio) < 1e-9
+
+
+def test_model_used_passed_through() -> None:
+    """Each result's ``model_used`` MUST equal the ``model`` argument verbatim."""
+    from talking_parrot.transcription.mlx_whisper_backend import (
+        MLXWhisperBackend,
+    )
+
+    segs = [
+        _segment_dict(0.0, 1.0, "a"),
+        _segment_dict(1.0, 2.0, "b"),
+    ]
+    _install_fake_numpy(buffer_length=32000)
+    _install_fake_mlx_whisper(transcribe_return={"segments": segs, "language": "en"})
+
+    backend = MLXWhisperBackend()
+    chunk = _make_chunk()
+
+    with patch(
+        "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
+        return_value=_fake_reader(),
+    ):
+        results = backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
+
+    assert all(r.model_used == "large-v3" for r in results)

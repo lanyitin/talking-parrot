@@ -85,38 +85,65 @@ tests:
 ---
 ### Requirement: FasterWhisperBackend assembles TranscriptionResult per the backend contract
 
-`FasterWhisperBackend.transcribe()` SHALL consume the segment iterator returned by `WhisperModel.transcribe`, joining segment `text` values with a single space and stripping the result for `TranscriptionResult.text`. It SHALL compute `TranscriptionMetrics` per the rules in `transcription-backend` (weighted-mean `avg_logprob` and `compression_ratio`, max `no_speech_prob`, locally-computed `repetition_ratio`). It SHALL set `language` to the value from the `info` object returned by `WhisperModel.transcribe` (the second return value), preferring it over the supplied `language` argument so that auto-detection is preserved when `language=None`.
+`FasterWhisperBackend.transcribe()` SHALL consume the segment iterator returned by `WhisperModel.transcribe` and emit one `TranscriptionResult` per yielded segment, in iteration order, satisfying the segment-level rules declared in `transcription-backend`.
 
-#### Scenario: Auto-detected language surfaced in result
+For each yielded segment:
 
-- **GIVEN** `model.transcribe(...)` returns `(segments, info)` where `info.language == "ja"`
+- The result's `text` SHALL equal the segment's `text` after `str.strip()` (no cross-segment joining).
+- The result's `metrics` SHALL be populated with the segment's raw `avg_logprob`, `compression_ratio`, `no_speech_prob`, plus a locally-computed `repetition_ratio` derived from the segment's stripped text.
+- The result's `start_ms` and `end_ms` SHALL be `chunk.start_ms + int(round(segment.start * 1000))` and `chunk.start_ms + int(round(segment.end * 1000))` respectively.
+
+The backend SHALL set every result's `language` to the value from the `info` object returned by `WhisperModel.transcribe` (the second return value), preferring it over the supplied `language` argument so that auto-detection is preserved when `language=None`.
+
+#### Scenario: Auto-detected language surfaced on each result
+
+- **GIVEN** `model.transcribe(...)` returns `(segments, info)` where `info.language == "ja"` and the iterator yields three segments
 - **WHEN** `transcribe()` is called with `language=None`
-- **THEN** the returned `TranscriptionResult.language` MUST equal `"ja"`
+- **THEN** every element of the returned list MUST have `language == "ja"`
 
-##### Example: text concatenation
+#### Scenario: One result per yielded segment
 
-- **GIVEN** segment iterator yields `text=" hello"`, `text=" world "`, `text=""`
+- **GIVEN** the iterator yields two segments with texts `" hello"`, `" world "`
 - **WHEN** `FasterWhisperBackend.transcribe()` runs
-- **THEN** `result.text` MUST equal `"hello  world"` (join-by-space then strip)
+- **THEN** the returned list MUST have length 2 with `result[0].text == "hello"` and `result[1].text == "world"`
+
+##### Example: empty-iterator return
+
+- **GIVEN** `WhisperModel.transcribe` yields zero segments for the chunk
+- **WHEN** `transcribe()` returns
+- **THEN** the returned list MUST equal `[]`
 
 <!-- @trace
-source: implement-transcription-stage
-updated: 2026-05-01
+source: segment-level-postprocessing-pipeline
+updated: 2026-05-08
 code:
-  - src/talking_parrot/expression/condition.py
-  - src/talking_parrot/stages/__init__.py
-  - src/talking_parrot/transcription/faster_whisper_backend.py
-  - src/talking_parrot/transcription/factory.py
-  - src/talking_parrot/transcription/mlx_whisper_backend.py
-  - docs/TODOs.md
-  - src/talking_parrot/transcription/__init__.py
-  - src/talking_parrot/transcription/backend.py
+  - src/talking_parrot/post_processing/factory.py
+  - sample1.srt
   - src/talking_parrot/stages/transcription_stage.py
-  - tests/unit/transcription/__init__.py
+  - src/talking_parrot/stages/hallucination_filter_stage.py
+  - src/talking_parrot/transcription/mlx_whisper_backend.py
+  - src/talking_parrot/transcription/faster_whisper_backend.py
+  - src/talking_parrot/transcription/backend.py
+  - src/talking_parrot/cli.py
+  - src/talking_parrot/post_processing/japanese.py
+  - sample1.json
+  - src/talking_parrot/config/models.py
+  - src/talking_parrot/logging_config.py
+  - CLAUDE.md
+  - src/talking_parrot/stages/alignment_stage.py
+  - src/talking_parrot/post_processing/dedup.py
 tests:
-  - tests/unit/transcription/test_factory.py
-  - tests/unit/transcription/test_mlx_whisper_backend.py
   - tests/unit/stages/test_transcription_stage.py
+  - tests/unit/stages/test_alignment_stage.py
   - tests/unit/transcription/test_backend.py
+  - tests/unit/transcription/test_mlx_whisper_backend.py
   - tests/unit/transcription/test_faster_whisper_backend.py
+  - tests/unit/cli/test_cli_wiring.py
+  - tests/unit/config/test_loader.py
+  - tests/integration/test_pipeline_smoke.py
+  - tests/unit/post_processing/test_japanese.py
+  - tests/unit/config/test_models.py
+  - tests/unit/post_processing/test_factory.py
+  - tests/unit/stages/test_hallucination_filter_stage.py
+  - tests/unit/post_processing/test_dedup.py
 -->

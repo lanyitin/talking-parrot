@@ -1,18 +1,19 @@
 """``FasterWhisperBackend`` — wraps ``faster_whisper.WhisperModel``.
 
 The class lazy-imports ``faster_whisper`` on the first ``transcribe()`` call,
-caches one ``WhisperModel`` instance per distinct ``model`` name, and converts
-provider-specific output into a ``TranscriptionResult`` with the four portable
-``TranscriptionMetrics`` fields described by the ``transcription-backend``
-spec.
+caches one ``WhisperModel`` instance per distinct ``model`` name, and emits one
+``TranscriptionResult`` per yielded Whisper internal segment, with raw
+per-segment ``TranscriptionMetrics`` as required by the
+``transcription-backend`` and ``faster-whisper-backend`` specs.
 """
 
 from __future__ import annotations
 
 import importlib
-import structlog
 from pathlib import Path
 from typing import Any
+
+import structlog
 
 from talking_parrot.models.chunk import Chunk
 from talking_parrot.models.transcription import (
@@ -48,14 +49,16 @@ class FasterWhisperBackend(TranscriptionBackend):
         chunk: Chunk,
         model: str,
         language: str | None,
-    ) -> TranscriptionResult:
+    ) -> list[TranscriptionResult]:
         """Transcribe ``[chunk.start_ms, chunk.end_ms)`` of ``audio_path``.
 
         Lazily imports ``faster_whisper``, instantiates the requested model on
         first use (cached for subsequent calls), invokes
         ``WhisperModel.transcribe`` with ``clip_timestamps`` set to the chunk
-        window in seconds, and assembles the cross-backend
-        ``TranscriptionResult`` per the ``transcription-backend`` contract.
+        window in seconds, and emits one ``TranscriptionResult`` per yielded
+        Whisper internal segment in temporal order. Returns ``[]`` when the
+        underlying iterator yields no segments — callers MUST treat this as a
+        valid no-op outcome (per the ``transcription-backend`` contract).
         """
         whisper_model = self._get_model(model)
 
@@ -87,20 +90,32 @@ class FasterWhisperBackend(TranscriptionBackend):
             "'language' attribute — API may have changed"
         )
 
-        text = " ".join(seg.text for seg in segments).strip()
-        metrics = _compute_metrics(segments, text)
         result_language = info.language
 
-        return TranscriptionResult(
-            chunk_index=chunk.index,
-            start_ms=chunk.start_ms,
-            end_ms=chunk.end_ms,
-            text=text,
-            language=result_language,
-            model_used=model,
-            metrics=metrics,
-            aligned_tokens=None,
-        )
+        results: list[TranscriptionResult] = []
+        for seg in segments:
+            seg_text = (seg.text or "").strip()
+            start_ms = chunk.start_ms + int(round(seg.start * 1000))
+            end_ms = chunk.start_ms + int(round(seg.end * 1000))
+            metrics = TranscriptionMetrics(
+                avg_logprob=seg.avg_logprob,
+                compression_ratio=seg.compression_ratio,
+                no_speech_prob=seg.no_speech_prob,
+                repetition_ratio=_segment_repetition_ratio(seg_text),
+            )
+            results.append(
+                TranscriptionResult(
+                    chunk_index=chunk.index,
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    text=seg_text,
+                    language=result_language,
+                    model_used=model,
+                    metrics=metrics,
+                    aligned_tokens=None,
+                )
+            )
+        return results
 
     def _get_model(self, model: str) -> Any:
         """Return the cached ``WhisperModel`` for *model*, constructing on first use.
@@ -142,55 +157,9 @@ class FasterWhisperBackend(TranscriptionBackend):
         return instance
 
 
-def _compute_metrics(segments: list[Any], text: str) -> TranscriptionMetrics:
-    """Derive the four cross-backend ``TranscriptionMetrics`` from raw segments.
-
-    Rules (per ``transcription-backend`` spec):
-    - ``avg_logprob``: weighted mean of segment ``avg_logprob`` weighted by
-      segment duration in milliseconds.
-    - ``compression_ratio``: weighted mean of segment ``compression_ratio``
-      weighted by segment duration in milliseconds.
-    - ``no_speech_prob``: maximum of segment ``no_speech_prob``.
-    - ``repetition_ratio``: ``1 - unique_tokens / total_tokens`` over
-      whitespace-split *text*; ``0.0`` when ``total_tokens == 0``.
-
-    When *segments* is empty all weighted metrics fall back to ``0.0`` so the
-    result is well-defined; this matches the empty-text case used by callers.
-    """
-    if not segments:
-        avg_logprob = 0.0
-        compression_ratio = 0.0
-        no_speech_prob = 0.0
-    else:
-        total_duration_ms = 0.0
-        weighted_logprob_sum = 0.0
-        weighted_compression_sum = 0.0
-        max_no_speech = float("-inf")
-        for seg in segments:
-            duration_ms = (seg.end - seg.start) * 1000.0
-            total_duration_ms += duration_ms
-            weighted_logprob_sum += seg.avg_logprob * duration_ms
-            weighted_compression_sum += seg.compression_ratio * duration_ms
-            if seg.no_speech_prob > max_no_speech:
-                max_no_speech = seg.no_speech_prob
-
-        if total_duration_ms > 0:
-            avg_logprob = weighted_logprob_sum / total_duration_ms
-            compression_ratio = weighted_compression_sum / total_duration_ms
-        else:
-            avg_logprob = 0.0
-            compression_ratio = 0.0
-        no_speech_prob = max_no_speech if max_no_speech != float("-inf") else 0.0
-
+def _segment_repetition_ratio(text: str) -> float:
+    """Return ``1 - unique/total`` over whitespace-split tokens; ``0.0`` if empty."""
     tokens = text.split()
     if not tokens:
-        repetition_ratio = 0.0
-    else:
-        repetition_ratio = 1.0 - (len(set(tokens)) / len(tokens))
-
-    return TranscriptionMetrics(
-        avg_logprob=avg_logprob,
-        compression_ratio=compression_ratio,
-        no_speech_prob=no_speech_prob,
-        repetition_ratio=repetition_ratio,
-    )
+        return 0.0
+    return 1.0 - (len(set(tokens)) / len(tokens))

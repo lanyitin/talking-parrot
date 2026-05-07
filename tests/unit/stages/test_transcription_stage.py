@@ -70,8 +70,12 @@ class FakeBackend(TranscriptionBackend):
         chunk: Chunk,
         model: str,
         language: str | None,
-    ) -> TranscriptionResult:
-        """Record the call and either raise or return a parametrised result."""
+    ) -> list[TranscriptionResult]:
+        """Record the call and either raise or return a parametrised list of results.
+
+        ``result_factory`` may return either a single ``TranscriptionResult``
+        (auto-wrapped into a one-element list for legacy callers) or a list.
+        """
         self.calls.append(
             {
                 "audio_path": audio_path,
@@ -83,18 +87,23 @@ class FakeBackend(TranscriptionBackend):
         if self._raise_exc is not None:
             raise self._raise_exc
         if self._result_factory is not None:
-            return self._result_factory(chunk, model, language)
-        # Default: deterministic well-formed result.
-        return TranscriptionResult(
-            chunk_index=chunk.index,
-            start_ms=chunk.start_ms,
-            end_ms=chunk.end_ms,
-            text=f"text-{chunk.index}-{model}",
-            language=language or "en",
-            model_used=model,
-            metrics=TranscriptionMetrics(0.0, 0.0, 0.0, 0.0),
-            aligned_tokens=None,
-        )
+            out = self._result_factory(chunk, model, language)
+            if isinstance(out, list):
+                return out
+            return [out]
+        # Default: deterministic well-formed single-segment result wrapped in a list.
+        return [
+            TranscriptionResult(
+                chunk_index=chunk.index,
+                start_ms=chunk.start_ms,
+                end_ms=chunk.end_ms,
+                text=f"text-{chunk.index}-{model}",
+                language=language or "en",
+                model_used=model,
+                metrics=TranscriptionMetrics(0.0, 0.0, 0.0, 0.0),
+                aligned_tokens=None,
+            )
+        ]
 
 
 class StubFactory:
@@ -590,3 +599,280 @@ def test_context_is_replaced_not_mutated() -> None:
     # Sanity: dataclass-replace based context.
     assert dataclasses.is_dataclass(out)
     assert len(out.transcription_results) == 2
+
+
+# ---------------------------------------------------------------------------
+# Task 3.1 — extend per-chunk segment lists into ctx.transcription_results
+# ---------------------------------------------------------------------------
+
+
+def _seg(
+    chunk_index: int,
+    start_ms: int,
+    end_ms: int,
+    text: str = "x",
+    *,
+    avg_logprob: float = 0.0,
+    compression_ratio: float = 1.0,
+    no_speech_prob: float = 0.0,
+    repetition_ratio: float = 0.0,
+    model: str = "m",
+    language: str = "en",
+) -> TranscriptionResult:
+    """Build a ``TranscriptionResult`` for a single Whisper segment."""
+    return TranscriptionResult(
+        chunk_index=chunk_index,
+        start_ms=start_ms,
+        end_ms=end_ms,
+        text=text,
+        language=language,
+        model_used=model,
+        metrics=TranscriptionMetrics(
+            avg_logprob=avg_logprob,
+            compression_ratio=compression_ratio,
+            no_speech_prob=no_speech_prob,
+            repetition_ratio=repetition_ratio,
+        ),
+        aligned_tokens=None,
+    )
+
+
+def test_multiple_results_per_chunk_preserved_in_order() -> None:
+    """Stage extends ctx.transcription_results with all per-chunk segments in order."""
+
+    def factory_fn(chunk: Chunk, model: str, language: str | None):
+        if chunk.index == 0:
+            return [
+                _seg(0, 0, 100, text="c0s0"),
+                _seg(0, 100, 200, text="c0s1"),
+                _seg(0, 200, 300, text="c0s2"),
+            ]
+        return [
+            _seg(1, 1000, 1100, text="c1s0"),
+            _seg(1, 1100, 1200, text="c1s1"),
+        ]
+
+    fake = FakeBackend(backend_name="b0", result_factory=factory_fn)
+    factory = StubFactory({"b0": fake})
+    stage = TranscriptionStage(factory=factory, evaluator=ConditionEvaluator())  # type: ignore[arg-type]
+
+    chunks = [_make_chunk(0, 0, 1000), _make_chunk(1, 1000, 2000)]
+    ctx = _make_ctx(
+        chunks=chunks,
+        transcribing=[{"condition": "true", "backend": "b0", "model": "m0"}],
+    )
+    out = stage.process(ctx)
+    assert len(out.transcription_results) == 5
+    assert [r.chunk_index for r in out.transcription_results] == [0, 0, 0, 1, 1]
+    assert [r.text for r in out.transcription_results] == [
+        "c0s0",
+        "c0s1",
+        "c0s2",
+        "c1s0",
+        "c1s1",
+    ]
+
+
+def test_empty_backend_result_for_chunk_extends_nothing() -> None:
+    """Backend returning [] for a chunk contributes zero rows and does not error."""
+    fake = FakeBackend(backend_name="b0", result_factory=lambda c, m, lang: [])
+    factory = StubFactory({"b0": fake})
+    stage = TranscriptionStage(factory=factory, evaluator=ConditionEvaluator())  # type: ignore[arg-type]
+
+    ctx = _make_ctx(
+        chunks=[_make_chunk(0, 0, 1000)],
+        transcribing=[{"condition": "true", "backend": "b0", "model": "m0"}],
+    )
+    out = stage.process(ctx)
+    assert out.transcription_results == []
+
+
+# ---------------------------------------------------------------------------
+# Task 3.2 — cascade aggregator (multi-segment, empty list, non-persistence)
+# ---------------------------------------------------------------------------
+
+
+def test_cascade_aggregate_multi_segment_decision_table() -> None:
+    """Step 0: 3 segs (mean avg_logprob=-1.5, rep=0.2); Step 1: 2 segs (mean=-0.5, rep=0.1)."""
+
+    # Step 0: three segments of duration 100 each.
+    # Duration-weighted mean of avg_logprob: (-1.0 + -2.0 + -1.5) / 3 = -1.5
+    # All three durations equal -> simple mean.
+    step0_segs = [
+        _seg(0, 0, 100, text="alpha", avg_logprob=-1.0, repetition_ratio=0.2),
+        _seg(0, 100, 200, text="beta", avg_logprob=-2.0, repetition_ratio=0.2),
+        _seg(0, 200, 300, text="gamma", avg_logprob=-1.5, repetition_ratio=0.2),
+    ]
+    # Step 1: two segments. Duration-weighted mean avg_logprob = -0.5.
+    step1_segs = [
+        _seg(0, 0, 100, text="xx", avg_logprob=-0.5, repetition_ratio=0.1),
+        _seg(0, 100, 200, text="yy", avg_logprob=-0.5, repetition_ratio=0.1),
+    ]
+
+    call_counter = {"n": 0}
+
+    def joint_factory(chunk, model, language):
+        n = call_counter["n"]
+        call_counter["n"] += 1
+        if n == 0:
+            return step0_segs
+        if n == 1:
+            return step1_segs
+        raise AssertionError("Step 2 must NOT execute")
+
+    fw = FakeBackend(backend_name="faster-whisper", result_factory=joint_factory)
+    factory = StubFactory({"faster-whisper": fw})
+    stage = TranscriptionStage(factory=factory, evaluator=ConditionEvaluator())  # type: ignore[arg-type]
+
+    ctx = _make_ctx(
+        chunks=[_make_chunk(0, 0, 1000)],
+        transcribing=[
+            {"condition": "true", "backend": "faster-whisper", "model": "base"},
+            {
+                "condition": "avg_logprob < -1.0",
+                "backend": "faster-whisper",
+                "model": "medium",
+            },
+            {
+                "condition": "repetition_ratio > 0.4",
+                "backend": "faster-whisper",
+                "model": "large-v3",
+            },
+        ],
+    )
+    out = stage.process(ctx)
+    assert len(fw.calls) == 2  # only steps 0 and 1
+    assert [r.text for r in out.transcription_results] == ["xx", "yy"]
+
+
+def test_aggregate_not_persisted_on_segments() -> None:
+    """Per-segment metrics on output match raw segment values, not the aggregate."""
+    step0_segs = [
+        _seg(0, 0, 100, avg_logprob=-1.0, repetition_ratio=0.2),
+        _seg(0, 100, 200, avg_logprob=-2.0, repetition_ratio=0.2),
+    ]
+
+    fake = FakeBackend(backend_name="b0", result_factory=lambda c, m, lang: step0_segs)
+    factory = StubFactory({"b0": fake})
+    stage = TranscriptionStage(factory=factory, evaluator=ConditionEvaluator())  # type: ignore[arg-type]
+
+    ctx = _make_ctx(
+        chunks=[_make_chunk(0, 0, 1000)],
+        transcribing=[{"condition": "true", "backend": "b0", "model": "m0"}],
+    )
+    out = stage.process(ctx)
+    assert out.transcription_results[0].metrics.avg_logprob == -1.0
+    assert out.transcription_results[1].metrics.avg_logprob == -2.0
+
+
+def test_empty_result_list_aggregate_is_all_zeros() -> None:
+    """Backend returning [] -> aggregate is all zeros; next-step condition False."""
+    step0 = FakeBackend(backend_name="b0", result_factory=lambda c, m, lang: [])
+    step1 = FakeBackend(backend_name="b1")
+    factory = StubFactory({"b0": step0, "b1": step1})
+
+    spy_evaluator = MagicMock(wraps=ConditionEvaluator())
+    stage = TranscriptionStage(factory=factory, evaluator=spy_evaluator)  # type: ignore[arg-type]
+
+    ctx = _make_ctx(
+        chunks=[_make_chunk(0, 0, 1000)],
+        transcribing=[
+            {"condition": "true", "backend": "b0", "model": "m0"},
+            {"condition": "avg_logprob < -1.0", "backend": "b1", "model": "m1"},
+        ],
+    )
+    out = stage.process(ctx)
+    # Step 1 evaluated against all-zero aggregate -> 0.0 < -1.0 == False -> step 1 NOT called.
+    assert len(step0.calls) == 1
+    assert len(step1.calls) == 0
+    assert out.transcription_results == []
+    # Verify the aggregate variables passed to step 1's evaluation are all zeros.
+    second_call = spy_evaluator.evaluate.call_args_list[1]
+    assert second_call.args[0] == "avg_logprob < -1.0"
+    assert second_call.args[1] == {
+        "avg_logprob": 0.0,
+        "compression_ratio": 0.0,
+        "no_speech_prob": 0.0,
+        "repetition_ratio": 0.0,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Task 3.3 — variables dict has exactly four keys (regression)
+# ---------------------------------------------------------------------------
+
+
+def test_variables_dict_exactly_four_keys_against_aggregate() -> None:
+    """For step N>0, the variables dict has exactly the four metric keys (no extras)."""
+    step0_segs = [
+        _seg(0, 0, 100, avg_logprob=-1.5),
+        _seg(0, 100, 200, avg_logprob=-1.5),
+    ]
+    step0 = FakeBackend(backend_name="b0", result_factory=lambda c, m, lang: step0_segs)
+    step1 = FakeBackend(backend_name="b1")
+    factory = StubFactory({"b0": step0, "b1": step1})
+
+    spy_evaluator = MagicMock(wraps=ConditionEvaluator())
+    stage = TranscriptionStage(factory=factory, evaluator=spy_evaluator)  # type: ignore[arg-type]
+
+    ctx = _make_ctx(
+        chunks=[_make_chunk(0, 0, 1000)],
+        transcribing=[
+            {"condition": "true", "backend": "b0", "model": "m0"},
+            {"condition": "avg_logprob < 0.0", "backend": "b1", "model": "m1"},
+        ],
+    )
+    stage.process(ctx)
+    second_call = spy_evaluator.evaluate.call_args_list[1]
+    variables = second_call.args[1]
+    assert set(variables.keys()) == {
+        "avg_logprob",
+        "compression_ratio",
+        "no_speech_prob",
+        "repetition_ratio",
+    }
+    assert len(variables) == 4
+
+
+# ---------------------------------------------------------------------------
+# Task 3.4 — segment-bound invariants on stage output
+# ---------------------------------------------------------------------------
+
+
+def test_segment_bounds_within_parent_chunk_invariants() -> None:
+    """All per-chunk segments lie within parent chunk, sorted ascending, non-overlapping."""
+
+    def factory_fn(chunk: Chunk, model: str, language: str | None):
+        # Chunk is [10000, 20000); produce three non-overlapping ascending segs.
+        return [
+            _seg(chunk.index, 10000, 13000, text="a"),
+            _seg(chunk.index, 13000, 17000, text="b"),
+            _seg(chunk.index, 17000, 20000, text="c"),
+        ]
+
+    fake = FakeBackend(backend_name="b0", result_factory=factory_fn)
+    factory = StubFactory({"b0": fake})
+    stage = TranscriptionStage(factory=factory, evaluator=ConditionEvaluator())  # type: ignore[arg-type]
+
+    chunks = [_make_chunk(0, 10000, 20000)]
+    ctx = _make_ctx(
+        chunks=chunks,
+        transcribing=[{"condition": "true", "backend": "b0", "model": "m0"}],
+    )
+    out = stage.process(ctx)
+    parent = chunks[0]
+
+    results_for_chunk = [r for r in out.transcription_results if r.chunk_index == 0]
+    assert len(results_for_chunk) == 3
+
+    # Each segment within parent bounds; start < end.
+    for r in results_for_chunk:
+        assert parent.start_ms <= r.start_ms < r.end_ms <= parent.end_ms
+
+    # Ascending by start_ms.
+    starts = [r.start_ms for r in results_for_chunk]
+    assert starts == sorted(starts)
+
+    # Non-overlapping (adjacent end <= next start).
+    for i in range(len(results_for_chunk) - 1):
+        assert results_for_chunk[i].end_ms <= results_for_chunk[i + 1].start_ms

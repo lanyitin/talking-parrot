@@ -4,10 +4,11 @@ The stage:
 
 1. Resolves a single :class:`AlignmentBackend` per run via the injected
    :class:`AlignmentBackendFactory`.
-2. For each :class:`TranscriptionResult`, reads the chunk's PCM bytes from the
-   injected :class:`AudioReader`, calls ``backend.align(...)``, and shifts the
-   returned chunk-relative timestamps to absolute time by adding
-   ``chunk.start_ms``.
+2. For each :class:`TranscriptionResult`, reads the segment's PCM bytes from
+   the injected :class:`AudioReader` using ``(result.start_ms, result.end_ms)``
+   (NOT the parent chunk's bounds), calls ``backend.align(...)``, and shifts
+   the returned window-relative timestamps to absolute time by adding
+   ``result.start_ms``.
 3. Applies a bounded per-chunk fallback: a backend exception for one chunk
    does not abort the run; that chunk's tokens become ``[]`` and processing
    continues.
@@ -89,6 +90,12 @@ class AlignmentStage(PipelineStage):
                 alignment_results=[],
             )
 
+        logger.info(
+            "AlignmentStage: granularity preference resolved",
+            granularity_preference=granularity_pref.value,
+            language=ctx.config.expected_language,
+        )
+
         try:
             backend = self._factory.create(
                 ctx.config.expected_language, granularity_pref
@@ -106,6 +113,14 @@ class AlignmentStage(PipelineStage):
                 alignment_granularity=None,
                 alignment_results=[],
             )
+
+        logger.info(
+            "AlignmentStage: backend resolved",
+            backend=type(backend).__name__,
+            backend_granularity=backend.granularity.value,
+            requested=granularity_pref.value,
+            downgraded=backend.granularity.value != granularity_pref.value,
+        )
 
         # ---- Per-chunk loop -----------------------------------------------
         if not ctx.transcription_results:
@@ -125,14 +140,21 @@ class AlignmentStage(PipelineStage):
         successful_chunks_count = 0
 
         for result in ctx.transcription_results:
-            chunk = ctx.chunks[result.chunk_index]
-            audio_bytes = self._audio_reader.read(chunk.start_ms, chunk.end_ms)
+            # Read audio per-segment using the result's own absolute time bounds,
+            # NOT the parent chunk's bounds. After the segment-level
+            # post-processing pipeline contract change, a single chunk can
+            # produce multiple TranscriptionResult rows, each carrying its own
+            # (start_ms, end_ms). result.chunk_index is retained for diagnostic
+            # logging only and MUST NOT be used to derive the audio range.
+            audio_bytes = self._audio_reader.read(result.start_ms, result.end_ms)
             try:
                 tokens = backend.align(audio_bytes, sample_rate, result.text)
             except Exception as exc:
                 logger.warning(
                     "alignment failed for chunk",
                     chunk_index=result.chunk_index,
+                    result_start_ms=result.start_ms,
+                    result_end_ms=result.end_ms,
                     error=type(exc).__name__,
                 )
                 absolute_tokens_per_result.append([])
@@ -141,8 +163,8 @@ class AlignmentStage(PipelineStage):
             shifted = [
                 dataclasses.replace(
                     t,
-                    start_ms=t.start_ms + chunk.start_ms,
-                    end_ms=t.end_ms + chunk.start_ms,
+                    start_ms=t.start_ms + result.start_ms,
+                    end_ms=t.end_ms + result.start_ms,
                 )
                 for t in tokens
             ]
@@ -168,12 +190,23 @@ class AlignmentStage(PipelineStage):
             for i, r in enumerate(ctx.transcription_results)
         ]
 
+        final_granularity = (
+            backend.granularity if final_status is AlignmentStatus.SUCCESS else None
+        )
+        logger.info(
+            "AlignmentStage: alignment complete",
+            status=final_status.value,
+            final_granularity=(
+                final_granularity.value if final_granularity is not None else None
+            ),
+            successful_chunks=successful_chunks_count,
+            total_chunks=len(ctx.transcription_results),
+        )
+
         return dataclasses.replace(
             ctx,
             transcription_results=new_results,
             alignment_results=alignment_results,
             alignment_status=final_status,
-            alignment_granularity=(
-                backend.granularity if final_status is AlignmentStatus.SUCCESS else None
-            ),
+            alignment_granularity=final_granularity,
         )

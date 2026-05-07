@@ -23,7 +23,8 @@ class TranscriptionBackend(abc.ABC):
       (``"faster-whisper"``, ``"mlx-whisper"``, ...).
     - The ``transcribe`` method which transcribes the audio window
       ``[chunk.start_ms, chunk.end_ms)`` of ``audio_path`` using ``model`` and
-      returns a fully-populated ``TranscriptionResult``.
+      returns a ``list[TranscriptionResult]`` with one element per Whisper
+      internal segment, ordered ascending by ``start_ms``.
     """
 
     @property
@@ -38,8 +39,27 @@ class TranscriptionBackend(abc.ABC):
         chunk: Chunk,
         model: str,
         language: str | None,
-    ) -> TranscriptionResult:
-        """Transcribe the chunk window and return a populated ``TranscriptionResult``.
+    ) -> list[TranscriptionResult]:
+        """Transcribe the chunk window and return per-segment results.
+
+        Each Whisper internal segment MUST become exactly one
+        ``TranscriptionResult`` in the returned list, with absolute timing
+        (``chunk.start_ms + segment.start * 1000`` for ``start_ms``, similarly
+        for ``end_ms``). The list MUST be ordered by ascending ``start_ms``.
+
+        Metrics carried on each result MUST be the raw per-segment values
+        reported by the underlying Whisper library (``avg_logprob``,
+        ``compression_ratio``, ``no_speech_prob``) plus a per-segment
+        ``repetition_ratio`` computed over the segment's text. Backends MUST
+        NOT aggregate metrics across segments — chunk-level aggregation for
+        cascade decisions is the responsibility of ``TranscriptionStage``.
+
+        ``aligned_tokens`` MUST be ``None`` on every returned result;
+        word-level alignment is produced later by ``AlignmentStage``.
+
+        The returned list MAY be empty when the underlying model produces no
+        segments for the chunk window. Callers MUST treat an empty list as a
+        valid (no-op) outcome and MUST NOT raise.
 
         Args:
             audio_path: Path to the source audio file.
@@ -51,5 +71,6 @@ class TranscriptionBackend(abc.ABC):
                 "auto-detect via the underlying library".
 
         Returns:
-            A fully populated ``TranscriptionResult``.
+            A list of populated ``TranscriptionResult`` instances, one per
+            Whisper internal segment, in temporal order. May be empty.
         """
