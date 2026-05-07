@@ -7,7 +7,7 @@ and ``transformers`` are lazy-imported on the first :meth:`align` call.
 
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import Any
 
 from talking_parrot.alignment.backend import AlignmentBackend
@@ -15,7 +15,7 @@ from talking_parrot.alignment.ctc import ctc_align
 from talking_parrot.models.context import AlignmentGranularity
 from talking_parrot.models.transcription import AlignedToken
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # Module-level constant exposed for testability — tests can monkey-patch this
@@ -73,7 +73,7 @@ class JapaneseAlignmentBackend(AlignmentBackend):
 
         logger.debug(
             "calling Wav2Vec2Processor for JapaneseAlignmentBackend",
-            extra={"sample_rate": sample_rate},
+            sample_rate=sample_rate,
         )
         proc_out = self._processor(
             audio_array, sampling_rate=sample_rate, return_tensors="pt"
@@ -89,7 +89,7 @@ class JapaneseAlignmentBackend(AlignmentBackend):
         emissions = self._torch.log_softmax(logits, dim=-1)
         logger.debug(
             "Wav2Vec2ForCTC forward returned",
-            extra={"logits_shape": tuple(logits.shape)},
+            logits_shape=tuple(logits.shape),
         )
 
         dictionary = self._processor.tokenizer.get_vocab()
@@ -133,12 +133,13 @@ class JapaneseAlignmentBackend(AlignmentBackend):
         device_name = "cuda" if torch.cuda.is_available() else "cpu"
         logger.debug(
             "calling transformers.Wav2Vec2Processor.from_pretrained",
-            extra={"model_id": MODEL_ID},
+            model_id=MODEL_ID,
         )
         processor = transformers.Wav2Vec2Processor.from_pretrained(MODEL_ID)
         logger.debug(
             "calling transformers.Wav2Vec2ForCTC.from_pretrained",
-            extra={"model_id": MODEL_ID, "device": device_name},
+            model_id=MODEL_ID,
+            device=device_name,
         )
         model = transformers.Wav2Vec2ForCTC.from_pretrained(MODEL_ID).to(device_name)
 
@@ -162,7 +163,7 @@ class JapaneseAlignmentBackend(AlignmentBackend):
 
         logger.debug(
             "calling np.frombuffer for Japanese alignment audio decode",
-            extra={"num_bytes": len(audio_data)},
+            num_bytes=len(audio_data),
         )
         samples = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
         if samples.shape[0] < _MIN_SAMPLES:

@@ -6,16 +6,17 @@ first ``analyze()`` call and cached for all subsequent calls.
 
 from __future__ import annotations
 
-import logging
 import struct
 from typing import TYPE_CHECKING
+
+import structlog
 
 from talking_parrot.vad.backend import VADBackend
 
 if TYPE_CHECKING:
     from talking_parrot.models.vad import RawVadFrame
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 try:
     from silero_vad import load_silero_vad  # type: ignore[import-not-found]

@@ -9,6 +9,7 @@ ML libraries are loaded.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import pytest
@@ -34,6 +35,13 @@ from talking_parrot.models.transcription import (
     TranscriptionResult,
 )
 from talking_parrot.stages.alignment_stage import AlignmentStage
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(s: str) -> str:
+    """Remove ANSI escape sequences emitted by structlog's ConsoleRenderer."""
+    return _ANSI_RE.sub("", s)
 
 
 # ---------------------------------------------------------------------------
@@ -332,7 +340,9 @@ def test_one_chunk_fails_one_succeeds_yields_success(
     assert out.alignment_results[0].tokens == []
     assert out.alignment_results[1].tokens != []
     assert any(
-        "alignment failed for chunk 0" in rec.getMessage() for rec in caplog.records
+        "alignment failed for chunk" in _strip_ansi(rec.getMessage())
+        and "chunk_index=0" in _strip_ansi(rec.getMessage())
+        for rec in caplog.records
     )
 
 

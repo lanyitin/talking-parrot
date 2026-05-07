@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -24,6 +25,13 @@ from talking_parrot.models.transcription import (
 )
 from talking_parrot.stages.transcription_stage import TranscriptionStage
 from talking_parrot.transcription.backend import TranscriptionBackend
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(s: str) -> str:
+    """Remove ANSI escape sequences emitted by structlog's ConsoleRenderer."""
+    return _ANSI_RE.sub("", s)
 
 
 # ---------------------------------------------------------------------------
@@ -486,7 +494,11 @@ def test_step_1_backend_failure_preserves_step_0_result(
     assert out.transcription_results[0].text == "step0"
     # WARNING log mentions step index 1
     warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
-    assert any("transcription step 1 failed" in r.getMessage() for r in warning_records)
+    assert any(
+        "transcription step failed" in _strip_ansi(r.getMessage())
+        and "step_index=1" in _strip_ansi(r.getMessage())
+        for r in warning_records
+    )
     assert len(step2.calls) == 0
 
 

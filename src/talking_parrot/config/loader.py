@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import logging
-import pydantic
-import yaml
 import structlog
 
+import pydantic
+import yaml
+
 from talking_parrot.config.models import PipelineConfig
+from talking_parrot.transcription.factory import TranscriptionBackendFactory
 
 log = structlog.get_logger()
-_logger = logging.getLogger(__name__)
+_logger = structlog.get_logger(__name__)
 
 
 class ConfigLoader:
@@ -18,6 +19,8 @@ class ConfigLoader:
             raw = yaml.safe_load(fh)
 
         cfg = PipelineConfig.model_validate(raw)
+
+        ConfigLoader._resolve_transcribing_backends(cfg)
 
         if cfg.transcribing[0].condition != "true":
             raise pydantic.ValidationError.from_exception_data(
@@ -39,6 +42,18 @@ class ConfigLoader:
         return cfg
 
     @staticmethod
+    def _resolve_transcribing_backends(cfg: PipelineConfig) -> None:
+        """Fill omitted ``TranscribingStep.backend`` values with the platform default."""
+        platform_default: str | None = None
+        for step in cfg.transcribing:
+            if step.backend is None:
+                if platform_default is None:
+                    platform_default = (
+                        TranscriptionBackendFactory.default_for_platform()
+                    )
+                step.backend = platform_default
+
+    @staticmethod
     def _check_vad_chunking_consistency(cfg: PipelineConfig) -> None:
         vad = cfg.vad
         chunking = cfg.chunking
@@ -50,9 +65,7 @@ class ConfigLoader:
             and vad.max_speech_duration_ms > chunking.max_chunk_seconds * 1000
         ):
             _logger.warning(
-                "Inconsistent VAD/chunking durations: vad.max_speech_duration_ms=%d > "
-                "chunking.max_chunk_seconds*1000=%d. "
-                "The chunker may have to perform a hard cut mid-word.",
-                vad.max_speech_duration_ms,
-                chunking.max_chunk_seconds * 1000,
+                "Inconsistent VAD/chunking durations; chunker may hard-cut mid-word",
+                vad_max_speech_duration_ms=vad.max_speech_duration_ms,
+                chunking_max_chunk_ms=chunking.max_chunk_seconds * 1000,
             )

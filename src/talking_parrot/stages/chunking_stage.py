@@ -23,8 +23,9 @@ is decreased (clamped to 0) and ``end_ms`` is increased (clamped to
 from __future__ import annotations
 
 import dataclasses
-import logging
 from typing import TYPE_CHECKING, NamedTuple
+
+import structlog
 
 from talking_parrot.models.chunk import Chunk
 from talking_parrot.models.vad import VadSegment
@@ -33,7 +34,7 @@ from talking_parrot.stages.base import PipelineStage
 if TYPE_CHECKING:
     from talking_parrot.models.context import PipelineContext
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class _SegmentItem(NamedTuple):

@@ -13,7 +13,7 @@ The factory:
 
 from __future__ import annotations
 
-import logging
+import structlog
 import os
 import platform
 import sys
@@ -24,7 +24,7 @@ from talking_parrot.transcription.faster_whisper_backend import (
 )
 from talking_parrot.transcription.mlx_whisper_backend import MLXWhisperBackend
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class TranscriptionBackendFactory:

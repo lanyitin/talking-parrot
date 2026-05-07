@@ -9,7 +9,7 @@ thresholds.
 
 from __future__ import annotations
 
-import logging
+import structlog
 import math
 from typing import TYPE_CHECKING
 
@@ -19,7 +19,7 @@ from talking_parrot.post_processing.base import SubtitleProcessor, _renumber
 if TYPE_CHECKING:
     from talking_parrot.config.models import PostProcessingConfig
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _can_merge(
@@ -79,10 +79,9 @@ class TimeBasedSplitProcessor(SubtitleProcessor):
                 continue
             if len(sub.text) <= 1:
                 logger.debug(
-                    "TimeBasedSplitProcessor: cue index=%d not splittable "
-                    "(len(text)=%d <= 1)",
-                    sub.index,
-                    len(sub.text),
+                    "TimeBasedSplitProcessor: cue not splittable",
+                    cue_index=sub.index,
+                    text_len=len(sub.text),
                 )
                 out.append(sub)
                 continue

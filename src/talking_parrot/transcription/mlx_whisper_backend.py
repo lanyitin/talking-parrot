@@ -14,7 +14,7 @@ to a float32 numpy array scaled to ``[-1.0, 1.0]`` for the model.
 from __future__ import annotations
 
 import importlib
-import logging
+import structlog
 import platform
 import sys
 from pathlib import Path
@@ -28,7 +28,7 @@ from talking_parrot.models.transcription import (
 from talking_parrot.transcription.backend import TranscriptionBackend
 from talking_parrot.transcription.faster_whisper_backend import _compute_metrics
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class MLXWhisperBackend(TranscriptionBackend):
@@ -69,11 +69,9 @@ class MLXWhisperBackend(TranscriptionBackend):
 
         logger.debug(
             "calling mlx_whisper.transcribe",
-            extra={
-                "path_or_hf_repo": model,
-                "language": language,
-                "num_samples": len(audio_array),
-            },
+            path_or_hf_repo=model,
+            language=language,
+            num_samples=len(audio_array),
         )
         result_dict = mlx_whisper.transcribe(
             audio_array,
@@ -82,7 +80,7 @@ class MLXWhisperBackend(TranscriptionBackend):
         )
         logger.debug(
             "mlx_whisper.transcribe returned",
-            extra={"result_type": type(result_dict).__name__},
+            result_type=type(result_dict).__name__,
         )
 
         # Validate library return shape per third-party-call assertion rules.
@@ -122,12 +120,13 @@ class MLXWhisperBackend(TranscriptionBackend):
         reader = FfmpegAudioReader(str(audio_path))
         logger.debug(
             "calling FfmpegAudioReader.read",
-            extra={"start_ms": chunk.start_ms, "end_ms": chunk.end_ms},
+            start_ms=chunk.start_ms,
+            end_ms=chunk.end_ms,
         )
         pcm_bytes = reader.read(chunk.start_ms, chunk.end_ms)
         logger.debug(
             "FfmpegAudioReader.read returned",
-            extra={"num_bytes": len(pcm_bytes)},
+            num_bytes=len(pcm_bytes),
         )
         assert isinstance(pcm_bytes, bytes), (
             f"FfmpegAudioReader.read returned {type(pcm_bytes)!r}, expected bytes"
@@ -146,7 +145,7 @@ class MLXWhisperBackend(TranscriptionBackend):
             mlx_whisper = importlib.import_module("mlx_whisper")
             logger.debug(
                 "importlib.import_module('mlx_whisper') returned",
-                extra={"result_type": type(mlx_whisper).__name__},
+                result_type=type(mlx_whisper).__name__,
             )
         except ModuleNotFoundError as exc:
             raise ImportError("Install with: uv add 'talking-parrot[mlx]'") from exc
@@ -164,7 +163,7 @@ class MLXWhisperBackend(TranscriptionBackend):
             np = importlib.import_module("numpy")
             logger.debug(
                 "importlib.import_module('numpy') returned",
-                extra={"result_type": type(np).__name__},
+                result_type=type(np).__name__,
             )
         except ModuleNotFoundError as exc:
             raise ImportError("Install with: uv add 'talking-parrot[mlx]'") from exc

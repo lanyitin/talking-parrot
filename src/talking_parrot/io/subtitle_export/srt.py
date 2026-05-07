@@ -9,7 +9,7 @@ produces a zero-byte file.
 
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import TYPE_CHECKING
 
 from talking_parrot.io.subtitle_export.base import SubtitleExporter
@@ -17,7 +17,7 @@ from talking_parrot.io.subtitle_export.base import SubtitleExporter
 if TYPE_CHECKING:
     from talking_parrot.models.subtitle import Subtitle
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SRTExporter(SubtitleExporter):
@@ -51,10 +51,10 @@ class SRTExporter(SubtitleExporter):
         """
         body = self._render(subtitles)
         logger.debug(
-            "SRTExporter export count=%d output_path=%s bytes=%d",
-            len(subtitles),
-            output_path,
-            len(body.encode("utf-8")),
+            "SRTExporter export",
+            count=len(subtitles),
+            output_path=output_path,
+            bytes=len(body.encode("utf-8")),
         )
         self._atomic_write_text(output_path, body)
 

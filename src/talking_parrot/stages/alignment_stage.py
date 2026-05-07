@@ -23,7 +23,7 @@ short-circuits without consulting the factory or audio reader.
 from __future__ import annotations
 
 import dataclasses
-import logging
+import structlog
 from typing import TYPE_CHECKING
 
 from talking_parrot.models.context import (
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from talking_parrot.io.audio_reader import AudioReader
     from talking_parrot.models.context import PipelineContext
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class AlignmentStage(PipelineStage):
@@ -78,9 +78,9 @@ class AlignmentStage(PipelineStage):
             )
         except ValueError as exc:
             logger.warning(
-                "AlignmentStage: invalid granularity preference %r: %s",
-                ctx.config.align.granularity,
-                exc,
+                "AlignmentStage: invalid granularity preference",
+                granularity=ctx.config.align.granularity,
+                error=str(exc),
             )
             return dataclasses.replace(
                 ctx,
@@ -95,10 +95,10 @@ class AlignmentStage(PipelineStage):
             )
         except ValueError as exc:
             logger.warning(
-                "AlignmentStage: no backend for language=%r pref=%r: %s",
-                ctx.config.expected_language,
-                granularity_pref,
-                exc,
+                "AlignmentStage: no backend",
+                language=ctx.config.expected_language,
+                granularity_pref=granularity_pref,
+                error=str(exc),
             )
             return dataclasses.replace(
                 ctx,
@@ -131,9 +131,9 @@ class AlignmentStage(PipelineStage):
                 tokens = backend.align(audio_bytes, sample_rate, result.text)
             except Exception as exc:
                 logger.warning(
-                    "alignment failed for chunk %d: %s",
-                    result.chunk_index,
-                    type(exc).__name__,
+                    "alignment failed for chunk",
+                    chunk_index=result.chunk_index,
+                    error=type(exc).__name__,
                 )
                 absolute_tokens_per_result.append([])
                 continue

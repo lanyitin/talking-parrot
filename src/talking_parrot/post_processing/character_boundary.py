@@ -5,7 +5,7 @@ Spec: ``character-boundary-processors``. Design: D4 (no token map) and D6.
 
 from __future__ import annotations
 
-import logging
+import structlog
 import math
 from typing import TYPE_CHECKING
 
@@ -15,7 +15,7 @@ from talking_parrot.post_processing.base import SubtitleProcessor, _renumber
 if TYPE_CHECKING:
     from talking_parrot.config.models import PostProcessingConfig
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _can_merge_character(
@@ -75,10 +75,9 @@ class CharacterBoundarySplitProcessor(SubtitleProcessor):
                 continue
             if len(sub.text) <= 1:
                 logger.debug(
-                    "CharacterBoundarySplitProcessor: cue index=%d not splittable "
-                    "(len(text)=%d <= 1)",
-                    sub.index,
-                    len(sub.text),
+                    "CharacterBoundarySplitProcessor: cue not splittable",
+                    cue_index=sub.index,
+                    text_len=len(sub.text),
                 )
                 out.append(sub)
                 continue

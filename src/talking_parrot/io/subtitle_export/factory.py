@@ -8,14 +8,14 @@ list).
 
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import ClassVar
 
 from talking_parrot.io.subtitle_export.base import SubtitleExporter
 from talking_parrot.io.subtitle_export.srt import SRTExporter
 from talking_parrot.io.subtitle_export.webvtt import WebVTTExporter
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SubtitleExporterFactory:
@@ -48,8 +48,8 @@ class SubtitleExporterFactory:
                 f"{format_name!r}. Supported: {supported}."
             )
         logger.debug(
-            "SubtitleExporterFactory.create format_name=%s class=%s",
-            format_name,
-            exporter_cls.__name__,
+            "SubtitleExporterFactory.create",
+            format_name=format_name,
+            cls=exporter_cls.__name__,
         )
         return exporter_cls()

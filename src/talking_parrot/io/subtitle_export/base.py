@@ -14,14 +14,14 @@ never leaves a partially-written subtitle file at ``output_path``.
 from __future__ import annotations
 
 import abc
-import logging
+import structlog
 import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from talking_parrot.models.subtitle import Subtitle
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class SubtitleExporter(abc.ABC):
@@ -69,10 +69,10 @@ class SubtitleExporter(abc.ABC):
         encoded = text.encode("utf-8")
 
         logger.debug(
-            "subtitle_export atomic_write begin path=%s tmp=%s bytes=%d",
-            output_path,
-            tmp_path,
-            len(encoded),
+            "subtitle_export atomic_write begin",
+            path=output_path,
+            tmp=tmp_path,
+            bytes=len(encoded),
         )
 
         parent = os.path.dirname(output_path)
@@ -85,4 +85,4 @@ class SubtitleExporter(abc.ABC):
             os.fsync(fh.fileno())
 
         os.replace(tmp_path, output_path)
-        logger.debug("subtitle_export atomic_write done path=%s", output_path)
+        logger.debug("subtitle_export atomic_write done", path=output_path)

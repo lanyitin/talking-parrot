@@ -13,7 +13,7 @@ both word-boundary processors.
 from __future__ import annotations
 
 import abc
-import logging
+import structlog
 from typing import TYPE_CHECKING
 
 from talking_parrot.models.context import AlignmentGranularity
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
     )
     from talking_parrot.post_processing.base import SubtitleProcessor
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class GranularityAwareProcessorFactory(abc.ABC):
@@ -71,8 +71,8 @@ class DefaultGranularityAwareProcessorFactory(GranularityAwareProcessorFactory):
         if granularity is AlignmentGranularity.WORD:
             token_map = self._build_token_map(ctx.transcription_results)
             logger.debug(
-                "factory: WORD path — token_map keys=%s",
-                sorted(token_map.keys()),
+                "factory: WORD path",
+                token_map_keys=sorted(token_map.keys()),
             )
             return [
                 WordBoundaryMergeProcessor(token_map_by_index=token_map),

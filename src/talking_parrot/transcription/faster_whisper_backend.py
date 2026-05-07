@@ -10,7 +10,7 @@ spec.
 from __future__ import annotations
 
 import importlib
-import logging
+import structlog
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +21,7 @@ from talking_parrot.models.transcription import (
 )
 from talking_parrot.transcription.backend import TranscriptionBackend
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class FasterWhisperBackend(TranscriptionBackend):
@@ -63,12 +63,10 @@ class FasterWhisperBackend(TranscriptionBackend):
         clip_end_s = chunk.end_ms / 1000
         logger.debug(
             "calling faster_whisper.WhisperModel.transcribe",
-            extra={
-                "audio_path": str(audio_path),
-                "language": language,
-                "clip_timestamps": [clip_start_s, clip_end_s],
-                "model": model,
-            },
+            audio_path=str(audio_path),
+            language=language,
+            clip_timestamps=[clip_start_s, clip_end_s],
+            model=model,
         )
         segments_iter, info = whisper_model.transcribe(
             str(audio_path),
@@ -78,10 +76,8 @@ class FasterWhisperBackend(TranscriptionBackend):
         segments = list(segments_iter)
         logger.debug(
             "faster_whisper.WhisperModel.transcribe returned",
-            extra={
-                "num_segments": len(segments),
-                "info_language": getattr(info, "language", None),
-            },
+            num_segments=len(segments),
+            info_language=getattr(info, "language", None),
         )
 
         # Validate library return shape per third-party-call assertion rules.
@@ -121,7 +117,7 @@ class FasterWhisperBackend(TranscriptionBackend):
             faster_whisper = importlib.import_module("faster_whisper")
             logger.debug(
                 "importlib.import_module('faster_whisper') returned",
-                extra={"result_type": type(faster_whisper).__name__},
+                result_type=type(faster_whisper).__name__,
             )
         except ModuleNotFoundError as exc:
             raise ImportError(
@@ -134,12 +130,12 @@ class FasterWhisperBackend(TranscriptionBackend):
 
         logger.debug(
             "calling faster_whisper.WhisperModel",
-            extra={"model_size_or_path": model},
+            model_size_or_path=model,
         )
         instance = faster_whisper.WhisperModel(model_size_or_path=model)
         logger.debug(
             "faster_whisper.WhisperModel returned",
-            extra={"result_type": type(instance).__name__},
+            result_type=type(instance).__name__,
         )
         self._models[model] = instance
         return instance

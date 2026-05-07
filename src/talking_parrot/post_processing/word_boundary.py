@@ -9,7 +9,7 @@ keep it in sync as cues merge / split.
 
 from __future__ import annotations
 
-import logging
+import structlog
 import math
 from typing import TYPE_CHECKING
 
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from talking_parrot.config.models import PostProcessingConfig
     from talking_parrot.models.transcription import AlignedToken
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _can_merge_word(a: Subtitle, b: Subtitle, config: "PostProcessingConfig") -> bool:
@@ -100,11 +100,10 @@ class WordBoundarySplitProcessor(SubtitleProcessor):
             n = math.ceil(duration / config.split_max_duration_ms)
             if len(tokens) < n:
                 logger.debug(
-                    "WordBoundarySplitProcessor: cue index=%d not splittable "
-                    "(len(tokens)=%d < n=%d)",
-                    sub.index,
-                    len(tokens),
-                    n,
+                    "WordBoundarySplitProcessor: cue not splittable",
+                    cue_index=sub.index,
+                    tokens_len=len(tokens),
+                    n=n,
                 )
                 out.append(sub)
                 continue

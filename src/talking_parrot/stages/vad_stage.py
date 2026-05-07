@@ -19,18 +19,20 @@ Processing pipeline within the stage:
 from __future__ import annotations
 
 import dataclasses
-import logging
 from typing import TYPE_CHECKING
+
+import structlog
 
 from talking_parrot.stages.base import PipelineStage
 
 if TYPE_CHECKING:
     from talking_parrot.expression.formula import FormulaEvaluator
+    from talking_parrot.io.audio_reader import AudioReader
     from talking_parrot.models.context import PipelineContext
     from talking_parrot.models.vad import RawVadFrame, VadSegment
     from talking_parrot.vad.backend import VADBackend
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class VADStage(PipelineStage):
@@ -47,15 +49,19 @@ class VADStage(PipelineStage):
         self,
         backends: list["VADBackend"],
         formula_evaluator: "FormulaEvaluator",
+        audio_reader: "AudioReader",
     ) -> None:
         """Initialise VADStage with its backends and formula evaluator.
 
         Args:
             backends: Ordered list of VAD backends to run.
             formula_evaluator: Evaluator for the composite score formula.
+            audio_reader: Source of raw PCM bytes; ``read(0, duration_ms)``
+                supplies audio to every backend's ``analyze``.
         """
         self._backends = backends
         self._formula_evaluator = formula_evaluator
+        self._audio_reader = audio_reader
 
     @property
     def name(self) -> str:
@@ -86,12 +92,8 @@ class VADStage(PipelineStage):
 
         logger.debug("VADStage processing", num_backends=len(self._backends))
 
-        # Gather per-backend frames.  The audio bytes come from media_info.
-        # Since PipelineContext does not carry raw audio bytes directly, we
-        # pass an empty bytes object to each backend.  Real backends read from
-        # the path in media_info; mocked backends return preset frames.
-        audio_data: bytes = b""
-        sample_rate = 16000
+        audio_data = self._audio_reader.read(0, ctx.media_info.duration_ms)
+        sample_rate = self._audio_reader.sample_rate
 
         backend_frames: dict[str, list["RawVadFrame"]] = {}
         for backend in self._backends:

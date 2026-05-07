@@ -12,7 +12,7 @@ call. If either is missing, an :class:`ImportError` mentioning the
 
 from __future__ import annotations
 
-import logging
+import structlog
 from typing import Any
 
 from talking_parrot.alignment.backend import AlignmentBackend
@@ -20,7 +20,7 @@ from talking_parrot.alignment.ctc import ctc_align
 from talking_parrot.models.context import AlignmentGranularity
 from talking_parrot.models.transcription import AlignedToken
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # Frame rate of WAV2VEC2_ASR_BASE_960H emissions at 16 kHz input
@@ -78,7 +78,7 @@ class EnglishAlignmentBackend(AlignmentBackend):
 
         logger.debug(
             "calling torchaudio model forward",
-            extra={"num_samples": int(audio_tensor.shape[-1])},
+            num_samples=int(audio_tensor.shape[-1]),
         )
         emissions, _ = self._model(audio_tensor)
         assert hasattr(emissions, "shape"), (
@@ -87,7 +87,7 @@ class EnglishAlignmentBackend(AlignmentBackend):
         emissions = self._torch.log_softmax(emissions, dim=-1)
         logger.debug(
             "torchaudio model forward returned",
-            extra={"emissions_shape": tuple(emissions.shape)},
+            emissions_shape=tuple(emissions.shape),
         )
 
         char_tokens = ctc_align(
@@ -121,7 +121,7 @@ class EnglishAlignmentBackend(AlignmentBackend):
         device_name = "cuda" if torch.cuda.is_available() else "cpu"
         logger.debug(
             "calling torchaudio.pipelines.WAV2VEC2_ASR_BASE_960H.get_model",
-            extra={"device": device_name},
+            device=device_name,
         )
         bundle = torchaudio.pipelines.WAV2VEC2_ASR_BASE_960H
         model = bundle.get_model().to(device_name)
@@ -132,7 +132,7 @@ class EnglishAlignmentBackend(AlignmentBackend):
         )
         logger.debug(
             "torchaudio bundle loaded",
-            extra={"num_labels": len(labels)},
+            num_labels=len(labels),
         )
 
         self._torch = torch
@@ -155,7 +155,7 @@ class EnglishAlignmentBackend(AlignmentBackend):
 
         logger.debug(
             "calling np.frombuffer for English alignment audio decode",
-            extra={"num_bytes": len(audio_data)},
+            num_bytes=len(audio_data),
         )
         samples = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
         if samples.shape[0] < _MIN_SAMPLES:

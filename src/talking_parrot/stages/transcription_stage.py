@@ -14,7 +14,7 @@ For each ``Chunk`` in ``ctx.chunks`` the stage:
 from __future__ import annotations
 
 import dataclasses
-import logging
+import structlog
 from typing import TYPE_CHECKING, Any
 
 from talking_parrot.models.transcription import TranscriptionResult
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from talking_parrot.models.context import PipelineContext
     from talking_parrot.transcription.factory import TranscriptionBackendFactory
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class TranscriptionStage(PipelineStage):
@@ -96,10 +96,8 @@ class TranscriptionStage(PipelineStage):
                     logger.debug(
                         "TranscriptionStage: step 0 evaluator raised; "
                         "step 0 always runs regardless",
-                        extra={
-                            "condition": step.condition,
-                            "chunk_index": chunk.index,
-                        },
+                        condition=step.condition,
+                        chunk_index=chunk.index,
                     )
             else:
                 condition_value = self._evaluator.evaluate(
@@ -108,11 +106,9 @@ class TranscriptionStage(PipelineStage):
                 if not condition_value:
                     logger.debug(
                         "TranscriptionStage: cascade halted on falsy condition",
-                        extra={
-                            "chunk_index": chunk.index,
-                            "step_index": idx,
-                            "condition": step.condition,
-                        },
+                        chunk_index=chunk.index,
+                        step_index=idx,
+                        condition=step.condition,
                     )
                     break
 
@@ -123,11 +119,9 @@ class TranscriptionStage(PipelineStage):
                 # Step 0 exceptions propagate — no prior result to fall back to.
                 logger.debug(
                     "TranscriptionStage: invoking step 0 backend",
-                    extra={
-                        "chunk_index": chunk.index,
-                        "backend": step.backend,
-                        "model": step.model,
-                    },
+                    chunk_index=chunk.index,
+                    backend=step.backend,
+                    model=step.model,
                 )
                 result = backend.transcribe(
                     ctx.media_info.path, chunk, step.model, language
@@ -136,23 +130,21 @@ class TranscriptionStage(PipelineStage):
                 try:
                     logger.debug(
                         "TranscriptionStage: invoking cascade step backend",
-                        extra={
-                            "chunk_index": chunk.index,
-                            "step_index": idx,
-                            "backend": step.backend,
-                            "model": step.model,
-                        },
+                        chunk_index=chunk.index,
+                        step_index=idx,
+                        backend=step.backend,
+                        model=step.model,
                     )
                     result = backend.transcribe(
                         ctx.media_info.path, chunk, step.model, language
                     )
                 except Exception as exc:
                     logger.warning(
-                        "transcription step %d failed: backend=%s model=%s exc=%s",
-                        idx,
-                        step.backend,
-                        step.model,
-                        type(exc).__name__,
+                        "transcription step failed",
+                        step_index=idx,
+                        backend=step.backend,
+                        model=step.model,
+                        error=type(exc).__name__,
                     )
                     break
 

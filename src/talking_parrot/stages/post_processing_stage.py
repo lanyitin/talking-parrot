@@ -21,7 +21,7 @@ The stage:
 from __future__ import annotations
 
 import dataclasses
-import logging
+import structlog
 from typing import TYPE_CHECKING
 
 from talking_parrot.models.context import AlignmentStatus
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
         GranularityAwareProcessorFactory,
     )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _build_seed_subtitles(
