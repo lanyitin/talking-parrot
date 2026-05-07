@@ -1,0 +1,53 @@
+# Talking Parrot 字幕 pipeline 設定範例
+# 對應 src/talking_parrot/config/models.py:PipelineConfig
+
+expected_language: ja          # 可選：預期語言 (ISO 639-1)，影響對齊後端選擇
+
+# Stage 1: VAD（語音活動偵測）
+vad:
+  enabled: true
+  activity_threshold: 0.5      # 語音起始門檻
+  neg_threshold: 0.35          # 語音結束門檻 (hysteresis)
+  min_speech_duration_ms: 250
+  max_speech_duration_ms: 30000
+  min_silence_duration_ms: 100
+  speech_pad_ms: 30
+  formula: "(ten_vad_prob + silero_vad_prob) / 2"   # 變數格式：{backend}_prob
+
+# Stage 2: 切塊
+chunking:
+  enabled: true
+  max_chunk_seconds: 30        # 注意：須 >= vad.max_speech_duration_ms / 1000
+  overlap_ms: 200
+  silence_pad_ms: 50
+
+# Stage 3: 轉錄（依序評估 condition，命中即使用該 backend）
+# 第一個 step 的 condition 必須為字串 "true"（fallback / default）
+# backend 可省略；省略時依執行平台自動選擇（Apple Silicon macOS → mlx-whisper，其餘 → faster-whisper）
+transcribing:
+  - condition: "true"
+    model: mlx-community/whisper-large-v3-mlx
+    language: ja
+  - condition: "avg_logprob < -1.0"
+    backend: faster-whisper
+    model: large-v3
+    language: ja
+
+# Stage 4: 對齊
+align:
+  enabled: true
+  granularity: AUTO            # AUTO | WORD | CHAR
+
+# Stage 5: 後處理
+post_processing:
+  enabled: true
+  max_line_length: 42
+  max_lines_per_subtitle: 2
+  merge_gap_threshold_ms: 200
+  merge_max_duration_ms: 6000
+  split_max_duration_ms: 6000  # 必須 >= merge_max_duration_ms (ADR-0003 D7)
+
+# Stage 6: 匯出
+export:
+  format: srt                  # srt | webvtt
+  output_path: output/result.srt
