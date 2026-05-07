@@ -11,6 +11,8 @@ Covers:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from talking_parrot.config.models import PipelineConfig, VadConfig
@@ -41,7 +43,7 @@ class _StubAudioReader(AudioReader):
 
 def _make_media_info(duration_ms: int = 10000) -> MediaInfo:
     """Create a minimal MediaInfo for test pipelines."""
-    return MediaInfo(path="/tmp/test.wav", duration_ms=duration_ms, sha256="abc")
+    return MediaInfo(path=Path("/tmp/test.wav"), duration_ms=duration_ms, sha256="abc")
 
 
 def _make_pipeline_config(vad: VadConfig | None = None) -> PipelineConfig:

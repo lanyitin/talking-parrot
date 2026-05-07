@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from talking_parrot.stages.base import PipelineStage
@@ -10,7 +12,7 @@ def _make_ctx():
     cfg = PipelineConfig(
         transcribing=[{"condition": "true", "backend": "faster-whisper"}]
     )
-    info = MediaInfo(path="/tmp/t.mp4", duration_ms=1000, sha256="abc")
+    info = MediaInfo(path=Path("/tmp/t.mp4"), duration_ms=1000, sha256="abc")
     return PipelineContext(config=cfg, media_info=info)
 
 

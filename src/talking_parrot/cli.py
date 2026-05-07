@@ -19,6 +19,7 @@ import argparse
 import datetime
 import structlog
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import ffmpeg
@@ -215,7 +216,9 @@ def main() -> None:
         parser.error(f"failed to probe input audio {args.input!r}: {exc}")
 
     sha256 = MediaHasher.hash(args.input)
-    media_info = MediaInfo(path=args.input, duration_ms=duration_ms, sha256=sha256)
+    media_info = MediaInfo(
+        path=Path(args.input), duration_ms=duration_ms, sha256=sha256
+    )
 
     ctx = PipelineContext(config=cfg, media_info=media_info)
     stages = _build_stages(cfg, media_path=args.input, audio_reader=audio_reader)

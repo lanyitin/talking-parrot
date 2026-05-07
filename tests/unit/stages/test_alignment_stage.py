@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -185,7 +186,9 @@ def _make_ctx(
         transcribing=[TranscribingStep(condition="true", backend="fake")],
         align=align,
     )
-    media_info = MediaInfo(path="/tmp/fake.wav", duration_ms=60_000, sha256="0" * 64)
+    media_info = MediaInfo(
+        path=Path("/tmp/fake.wav"), duration_ms=60_000, sha256="0" * 64
+    )
     return PipelineContext(
         config=config,
         media_info=media_info,

@@ -9,6 +9,7 @@ from __future__ import annotations
 import dataclasses
 import logging
 import re
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -132,7 +133,7 @@ def _make_ctx(
         transcribing=[TranscribingStep(**step) for step in transcribing],
         expected_language=expected_language,
     )
-    info = MediaInfo(path="/tmp/test.wav", duration_ms=60000, sha256="deadbeef")
+    info = MediaInfo(path=Path("/tmp/test.wav"), duration_ms=60000, sha256="deadbeef")
     return PipelineContext(
         config=cfg,
         media_info=info,

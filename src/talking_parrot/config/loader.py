@@ -30,7 +30,6 @@ class ConfigLoader:
                     {
                         "type": "value_error",
                         "loc": ("transcribing", 0, "condition"),
-                        "msg": 'First transcribing step condition must be "true"',
                         "input": cfg.transcribing[0].condition,
                         "ctx": {"error": ValueError('must be "true"')},
                     }

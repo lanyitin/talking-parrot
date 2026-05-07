@@ -112,6 +112,9 @@ class TranscriptionStage(PipelineStage):
                     )
                     break
 
+            assert (
+                step.backend is not None
+            )  # filled by ConfigLoader._resolve_transcribing_backends
             backend = self._factory.create(step.backend)
             language = step.language or ctx.config.expected_language
 

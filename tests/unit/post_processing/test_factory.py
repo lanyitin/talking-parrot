@@ -6,6 +6,7 @@ Spec: ``granularity-aware-processor-factory``. Design: D3, D7.
 from __future__ import annotations
 
 import enum
+from pathlib import Path
 
 import pytest
 
@@ -78,7 +79,7 @@ def _ctx(results: list[TranscriptionResult]) -> PipelineContext:
         expected_language="en",
         transcribing=[TranscribingStep(condition="true", backend="whisper")],
     )
-    media_info = MediaInfo(path="x", duration_ms=10_000, sha256="0" * 64)
+    media_info = MediaInfo(path=Path("x"), duration_ms=10_000, sha256="0" * 64)
     return PipelineContext(
         config=config,
         media_info=media_info,

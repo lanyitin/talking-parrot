@@ -140,8 +140,8 @@ class WordBoundarySplitProcessor(SubtitleProcessor):
                 out.append(
                     Subtitle(
                         index=sub.index,
-                        start_ms=first.start_ms,
-                        end_ms=last.end_ms,
+                        start_ms=int(first.start_ms),
+                        end_ms=int(last.end_ms),
                         text=piece_text,
                     )
                 )

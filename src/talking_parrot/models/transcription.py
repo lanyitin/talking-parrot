@@ -14,8 +14,8 @@ class TranscriptionMetrics:
 @dataclass(frozen=True)
 class AlignedToken:
     word: str
-    start_ms: int
-    end_ms: int
+    start_ms: float
+    end_ms: float
     score: float
 
 

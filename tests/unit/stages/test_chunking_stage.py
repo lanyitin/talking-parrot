@@ -11,6 +11,8 @@ Covers tasks 2.1, 2.2, 3.1 and 3.2 of the implement-chunking-stage change:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from talking_parrot.config.models import ChunkingConfig, PipelineConfig
@@ -57,7 +59,7 @@ def ctx_chunking_disabled() -> PipelineContext:
         transcribing=[{"condition": "true", "backend": "faster-whisper"}],
         chunking=ChunkingConfig(enabled=False),
     )
-    info = MediaInfo(path="/tmp/test.mp4", duration_ms=5000, sha256="deadbeef")
+    info = MediaInfo(path=Path("/tmp/test.mp4"), duration_ms=5000, sha256="deadbeef")
     return PipelineContext(
         config=cfg,
         media_info=info,
@@ -73,7 +75,7 @@ def ctx_chunking_none() -> PipelineContext:
         transcribing=[{"condition": "true", "backend": "faster-whisper"}],
         chunking=None,
     )
-    info = MediaInfo(path="/tmp/test.mp4", duration_ms=5000, sha256="deadbeef")
+    info = MediaInfo(path=Path("/tmp/test.mp4"), duration_ms=5000, sha256="deadbeef")
     return PipelineContext(
         config=cfg,
         media_info=info,
@@ -156,7 +158,7 @@ def _make_enabled_ctx(
             silence_pad_ms=silence_pad_ms,
         ),
     )
-    info = MediaInfo(path="/tmp/test.mp4", duration_ms=60_000, sha256="deadbeef")
+    info = MediaInfo(path=Path("/tmp/test.mp4"), duration_ms=60_000, sha256="deadbeef")
     return PipelineContext(
         config=cfg,
         media_info=info,
@@ -425,7 +427,9 @@ def _make_silence_pad_ctx(
             silence_pad_ms=silence_pad_ms,
         ),
     )
-    info = MediaInfo(path="/tmp/test.mp4", duration_ms=duration_ms, sha256="deadbeef")
+    info = MediaInfo(
+        path=Path("/tmp/test.mp4"), duration_ms=duration_ms, sha256="deadbeef"
+    )
     return PipelineContext(
         config=cfg,
         media_info=info,

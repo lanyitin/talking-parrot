@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+from pathlib import Path
 
 from talking_parrot.config.models import (
     PipelineConfig,
@@ -70,7 +71,7 @@ def _config(post: PostProcessingConfig | None) -> PipelineConfig:
 
 def _media() -> MediaInfo:
     """Build a placeholder MediaInfo."""
-    return MediaInfo(path="x", duration_ms=10_000, sha256="0" * 64)
+    return MediaInfo(path=Path("x"), duration_ms=10_000, sha256="0" * 64)
 
 
 def _ctx(

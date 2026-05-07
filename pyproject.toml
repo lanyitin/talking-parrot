@@ -65,6 +65,10 @@ talking-parrot = { workspace = true }
 [tool.uv.extra-build-dependencies]
 flash-attn = ["torch"]
 
+[[tool.mypy.overrides]]
+module = ["ffmpeg", "ten_vad", "silero_vad", "torchaudio", "transformers"]
+ignore_missing_imports = true
+
 [tool.coverage.run]
 source = ["talking-parrot"]
 
@@ -75,5 +79,6 @@ output = "coverage.xml"
 dev = [
     "mypy>=1.20.2",
     "ruff>=0.15.12",
+    "types-pyyaml>=6.0.12.20260408",
 ]
 

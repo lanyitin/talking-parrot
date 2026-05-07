@@ -35,13 +35,17 @@ class AlignmentBackendFactory:
 
     def create(
         self,
-        language: str,
+        language: str | None,
         granularity_pref: GranularityPreference = GranularityPreference.AUTO,
     ) -> AlignmentBackend:
         """Resolve and return a backend for ``(language, granularity_pref)``.
 
         Args:
-            language: ISO language code, e.g. ``"en"`` or ``"ja"``.
+            language: ISO language code, e.g. ``"en"`` or ``"ja"``. May be
+                ``None`` when the upstream pipeline could not determine an
+                expected language; this is treated as an unknown language and
+                raises ``ValueError`` so :class:`AlignmentStage` can convert
+                the failure into ``AlignmentStatus.FAILED``.
             granularity_pref: User preference. ``AUTO`` resolves to the
                 language's natural granularity defined in ``_DEFAULTS``.
 
@@ -49,9 +53,11 @@ class AlignmentBackendFactory:
             A cached or freshly instantiated :class:`AlignmentBackend`.
 
         Raises:
-            ValueError: If ``language`` is unknown (under AUTO) or no backend
+            ValueError: If ``language`` is ``None`` or unknown, or no backend
                 exists for ``(language, requested_granularity)``.
         """
+        if language is None:
+            raise ValueError(f"No alignment backend for language: {language}")
         if granularity_pref is GranularityPreference.AUTO:
             if language not in self._DEFAULTS:
                 raise ValueError(f"No alignment backend for language: {language}")

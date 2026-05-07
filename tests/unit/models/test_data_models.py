@@ -1,4 +1,6 @@
 import dataclasses
+from pathlib import Path
+
 import pytest
 
 from talking_parrot.models.media import MediaInfo
@@ -31,7 +33,7 @@ class TestChunkFields:
 
 class TestMediaInfo:
     def test_media_info_is_frozen(self):
-        info = MediaInfo(path="/tmp/test.mp4", duration_ms=60000, sha256="abc")
+        info = MediaInfo(path=Path("/tmp/test.mp4"), duration_ms=60000, sha256="abc")
         with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
             info.path = "/other"  # type: ignore
 

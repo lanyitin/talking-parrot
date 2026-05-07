@@ -6,6 +6,7 @@ runtime, model download, or array library is required in CI.
 
 from __future__ import annotations
 
+import importlib
 import sys
 import types
 from pathlib import Path
@@ -174,12 +175,12 @@ def test_missing_dependency_raises_actionable_import_error() -> None:
     backend = MLXWhisperBackend()
     chunk = _make_chunk()
 
-    real_import = __import__
+    real_import_module = importlib.import_module
 
-    def fake_import(name: str, *a, **kw):
+    def fake_import_module(name: str, *a, **kw):
         if name == "mlx_whisper":
             raise ModuleNotFoundError("No module named 'mlx_whisper'")
-        return real_import(name, *a, **kw)
+        return real_import_module(name, *a, **kw)
 
     # Provide fake numpy so import of numpy succeeds before mlx_whisper.
     _install_fake_numpy(buffer_length=32000)
@@ -192,7 +193,10 @@ def test_missing_dependency_raises_actionable_import_error() -> None:
         "talking_parrot.transcription.mlx_whisper_backend.FfmpegAudioReader",
         return_value=fake_reader,
     ):
-        with patch("builtins.__import__", side_effect=fake_import):
+        with patch(
+            "talking_parrot.transcription.mlx_whisper_backend.importlib.import_module",
+            side_effect=fake_import_module,
+        ):
             with pytest.raises(ImportError) as exc_info:
                 backend.transcribe(Path("/tmp/x.wav"), chunk, "large-v3", None)
 
