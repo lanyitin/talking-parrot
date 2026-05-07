@@ -85,6 +85,25 @@ class TestChunkingConfigSilencePad:
             ChunkingConfig(silence_pad_ms=-1)
 
 
+class TestTranscribingStepBackendOptional:
+    """`TranscribingStep.backend` is optional with platform-aware default (loader-resolved)."""
+
+    def test_backend_omitted_constructs_with_none(self):
+        """Omitting `backend` MUST construct successfully with `backend is None`."""
+        step = TranscribingStep(condition="true")
+        assert step.backend is None
+
+    def test_backend_explicit_value_preserved(self):
+        """An explicit backend value MUST be preserved on the model."""
+        step = TranscribingStep(condition="true", backend="faster-whisper")
+        assert step.backend == "faster-whisper"
+
+    def test_backend_explicit_null_constructs_with_none(self):
+        """Explicit `backend=None` (mirrors YAML `backend: null`) MUST be accepted."""
+        step = TranscribingStep(condition="true", backend=None)
+        assert step.backend is None
+
+
 class TestPipelineConfigUnknownFields:
     def test_unknown_top_level_field_rejected(self):
         with pytest.raises(pydantic.ValidationError):

@@ -6,16 +6,17 @@ The ``ten_vad.TenVad`` instance is lazy-initialised on the first
 
 from __future__ import annotations
 
-import logging
-import struct
 from typing import TYPE_CHECKING
+
+import numpy as np
+import structlog
 
 from talking_parrot.vad.backend import VADBackend
 
 if TYPE_CHECKING:
     from talking_parrot.models.vad import RawVadFrame
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 try:
     from ten_vad import TenVad  # type: ignore[import-not-found]
@@ -108,10 +109,14 @@ class TenVADBackend(VADBackend):
         instance = self._get_instance()
         frames: list[RawVadFrame] = []
 
+        # ten_vad.TenVad.process expects np.ndarray[int16] of shape (hop_size,);
+        # decode the whole buffer once and slice per frame.
+        all_samples = np.frombuffer(
+            audio_data[: num_frames * hop_size * 2], dtype=np.int16
+        )
+
         for i in range(num_frames):
-            byte_offset = i * hop_size * 2
-            chunk_bytes = audio_data[byte_offset : byte_offset + hop_size * 2]
-            chunk = struct.unpack(f"<{hop_size}h", chunk_bytes)
+            chunk = all_samples[i * hop_size : (i + 1) * hop_size]
 
             logger.debug(
                 "calling ten_vad.TenVad.process",
@@ -125,20 +130,14 @@ class TenVADBackend(VADBackend):
                 result_summary=repr(result)[:200],
             )
 
-            assert result is not None, (
-                "ten_vad.TenVad.process() returned None — check whether the library API changed."
-            )
-            assert hasattr(result, "probability"), (
-                f"ten_vad.TenVad.process() result missing 'probability' attribute — "
-                f"got type {type(result)!r}. Check whether the library API changed."
-            )
-            assert isinstance(result.probability, float), (
-                f"ten_vad.TenVad.process() result.probability is "
-                f"{type(result.probability)!r}, expected float. "
+            assert isinstance(result, tuple) and len(result) == 2, (
+                f"ten_vad.TenVad.process() returned {type(result)!r}, "
+                "expected a (probability, flags) tuple. "
                 "Check whether the library API changed."
             )
+            probability = float(result[0])
 
             time_ms = round(i * hop_size / sample_rate * 1000)
-            frames.append(RawVadFrame(time_ms=time_ms, prob=result.probability))
+            frames.append(RawVadFrame(time_ms=time_ms, prob=probability))
 
         return frames

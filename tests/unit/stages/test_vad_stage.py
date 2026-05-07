@@ -15,11 +15,23 @@ import pytest
 
 from talking_parrot.config.models import PipelineConfig, VadConfig
 from talking_parrot.expression.formula import FormulaEvaluator
+from talking_parrot.io.audio_reader import AudioReader
 from talking_parrot.models.context import PipelineContext
 from talking_parrot.models.media import MediaInfo
 from talking_parrot.models.vad import RawVadFrame, VadSegment
 from talking_parrot.stages.vad_stage import VADStage
 from talking_parrot.vad.backend import VADBackend
+
+
+class _StubAudioReader(AudioReader):
+    """Empty-PCM stub; mock backends ignore the bytes anyway."""
+
+    @property
+    def sample_rate(self) -> int:
+        return 16_000
+
+    def read(self, start_ms: int, end_ms: int) -> bytes:
+        return b""
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +87,11 @@ def _make_stage(
         backends = []
     if formula_evaluator is None:
         formula_evaluator = FormulaEvaluator()
-    return VADStage(backends=backends, formula_evaluator=formula_evaluator)
+    return VADStage(
+        backends=backends,
+        formula_evaluator=formula_evaluator,
+        audio_reader=_StubAudioReader(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +156,7 @@ class TestVADStageFrameAlignment:
         stage = VADStage(
             backends=[ten_backend, silero_backend],
             formula_evaluator=FormulaEvaluator(),
+            audio_reader=_StubAudioReader(),
         )
         # We need audio bytes — the backends are mocked so any bytes work
         ctx = _make_ctx(vad=vad_cfg, duration_ms=100)
@@ -172,6 +189,7 @@ class TestVADStageFrameAlignment:
         stage = VADStage(
             backends=[ten_backend, silero_backend],
             formula_evaluator=FormulaEvaluator(),
+            audio_reader=_StubAudioReader(),
         )
         aligned = stage._align_frames(
             {"ten_vad": ten_frames, "silero_vad": silero_frames}

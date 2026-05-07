@@ -60,14 +60,23 @@ def _full_cfg() -> PipelineConfig:
     )
 
 
-def _patch_heavy_constructors():
+def _patch_heavy_constructors(reader_duration_ms: int = 1000):
     """Return a context-manager-stack of patches that neutralize heavy backends.
 
     The CLI's ``_build_stages`` instantiates real VAD backends, transcription
     factory, alignment factory, etc. Tests don't need these to actually run;
     they only need the stage objects to exist with the right types and order.
     We patch the constructors with no-op stand-ins.
+
+    ``cli.main`` also constructs ``FfmpegAudioReader`` at the top level to
+    probe the input audio's duration; the patched class returns a Mock whose
+    ``duration_ms`` attribute is a real int (so the value can be JSON-encoded
+    into the project file).
     """
+    from unittest.mock import MagicMock
+
+    reader_mock = MagicMock()
+    reader_mock.return_value.duration_ms = reader_duration_ms
     return [
         patch("talking_parrot.cli.TenVADBackend"),
         patch("talking_parrot.cli.SileroVADBackend"),
@@ -76,7 +85,7 @@ def _patch_heavy_constructors():
         patch("talking_parrot.cli.TranscriptionBackendFactory"),
         patch("talking_parrot.cli.AlignmentBackendFactory"),
         patch("talking_parrot.cli.DefaultGranularityAwareProcessorFactory"),
-        patch("talking_parrot.cli.FfmpegAudioReader"),
+        patch("talking_parrot.cli.FfmpegAudioReader", new=reader_mock),
     ]
 
 
@@ -195,7 +204,7 @@ class TestExporterInvokedWhenConfigured:
                     str(media),
                     "--config",
                     str(config_yaml),
-                    "--output",
+                    "--project-json",
                     str(json_out),
                 ],
             )
@@ -241,7 +250,7 @@ class TestExporterInvokedWhenConfigured:
                         str(media),
                         "--config",
                         str(config_yaml),
-                        "--output",
+                        "--project-json",
                         str(json_out),
                     ],
                 )
@@ -291,3 +300,233 @@ class TestSilentWhenExportNotConfigured:
             assert "export" not in record.getMessage().lower(), (
                 "CLI must be silent about export when cfg.export is None"
             )
+
+
+class TestOutputFlagSemantics:
+    """Tests for the --output / --project-json flag semantics
+    (Requirement: cli.py accepts --output and --project-json with extension-aware semantics).
+    """
+
+    def _run(
+        self,
+        tmp_path: Path,
+        monkeypatch,
+        argv_extra: list[str],
+        config_yaml_text: str,
+    ) -> tuple[Path, Path]:
+        config_yaml = tmp_path / "cfg.yaml"
+        config_yaml.write_text(config_yaml_text, encoding="utf-8")
+        media = tmp_path / "media.mp4"
+        media.write_bytes(b"\x00")
+        return config_yaml, media
+
+    def test_output_overrides_yaml_subtitle_path_and_derives_json(
+        self, tmp_path: Path, monkeypatch, fake_run_yielding_one_subtitle
+    ) -> None:
+        # --output supplies the subtitle path; project-JSON derives by ext-swap.
+        # Also covers: cfg.export.output_path is NOT written when --output overrides it.
+        from_yaml = tmp_path / "from-yaml.srt"
+        from_cli = tmp_path / "from-cli.srt"
+        derived_json = tmp_path / "from-cli.json"
+        config_yaml, media = self._run(
+            tmp_path,
+            monkeypatch,
+            [],
+            _yaml_text_with_export_srt(str(from_yaml)),
+        )
+        patches = _patch_heavy_constructors() + [
+            patch("talking_parrot.cli.MediaHasher.hash", return_value="deadbeef"),
+        ]
+        _enter_all(patches)
+        try:
+            _run_main_with_args(
+                monkeypatch,
+                [
+                    "talking-parrot",
+                    str(media),
+                    "--config",
+                    str(config_yaml),
+                    "--output",
+                    str(from_cli),
+                ],
+            )
+        finally:
+            _exit_all(patches)
+
+        assert from_cli.exists(), "subtitle should be written to --output path"
+        assert derived_json.exists(), "project-JSON should derive from subtitle path"
+        assert not from_yaml.exists(), (
+            "cfg.export.output_path must be ignored when --output is supplied"
+        )
+
+    def test_project_json_overrides_derived_path(
+        self, tmp_path: Path, monkeypatch, fake_run_yielding_one_subtitle
+    ) -> None:
+        srt_out = tmp_path / "sub.srt"
+        json_out = tmp_path / "state-run.json"
+        config_yaml, media = self._run(
+            tmp_path,
+            monkeypatch,
+            [],
+            _yaml_text_with_export_srt(str(tmp_path / "ignored.srt")),
+        )
+        patches = _patch_heavy_constructors() + [
+            patch("talking_parrot.cli.MediaHasher.hash", return_value="deadbeef"),
+        ]
+        _enter_all(patches)
+        try:
+            _run_main_with_args(
+                monkeypatch,
+                [
+                    "talking-parrot",
+                    str(media),
+                    "--config",
+                    str(config_yaml),
+                    "--output",
+                    str(srt_out),
+                    "--project-json",
+                    str(json_out),
+                ],
+            )
+        finally:
+            _exit_all(patches)
+
+        assert srt_out.exists()
+        assert json_out.exists()
+        # The auto-derived path (sub.json) must NOT be created.
+        assert not (tmp_path / "sub.json").exists()
+
+    def test_output_required_when_no_export_configured(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        config_yaml, media = self._run(
+            tmp_path,
+            monkeypatch,
+            [],
+            _yaml_text_no_export(""),
+        )
+        with pytest.raises(SystemExit):
+            _run_main_with_args(
+                monkeypatch,
+                [
+                    "talking-parrot",
+                    str(media),
+                    "--config",
+                    str(config_yaml),
+                ],
+            )
+
+    def test_extension_mismatch_exits_before_pipeline_runs(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        # cfg.export.format == 'srt' but --output sample.vtt
+        srt_yaml_path = tmp_path / "yaml.srt"
+        bad_out = tmp_path / "sample.vtt"
+        config_yaml, media = self._run(
+            tmp_path,
+            monkeypatch,
+            [],
+            _yaml_text_with_export_srt(str(srt_yaml_path)),
+        )
+        run_patch = patch("talking_parrot.cli.PipelineOrchestrator.run")
+        patches = _patch_heavy_constructors() + [
+            patch("talking_parrot.cli.MediaHasher.hash", return_value="deadbeef"),
+            run_patch,
+        ]
+        entered = _enter_all(patches)
+        run_mock = entered[-1]
+        try:
+            with pytest.raises(SystemExit):
+                _run_main_with_args(
+                    monkeypatch,
+                    [
+                        "talking-parrot",
+                        str(media),
+                        "--config",
+                        str(config_yaml),
+                        "--output",
+                        str(bad_out),
+                    ],
+                )
+        finally:
+            _exit_all(patches)
+
+        run_mock.assert_not_called()
+        assert not bad_out.exists()
+        assert not (tmp_path / "sample.json").exists()
+        assert not srt_yaml_path.exists()
+
+
+class TestMediaDurationProbing:
+    """Tests for the duration-probing behavior
+    (Requirement: cli.py populates MediaInfo.duration_ms from the input file).
+    """
+
+    def test_real_duration_is_written_into_project_json(
+        self, tmp_path: Path, monkeypatch, fake_run_yielding_one_subtitle
+    ) -> None:
+        config_yaml = tmp_path / "cfg.yaml"
+        json_out = tmp_path / "project.json"
+        config_yaml.write_text(_yaml_text_no_export(""), encoding="utf-8")
+        media = tmp_path / "media.mp4"
+        media.write_bytes(b"\x00")
+
+        patches = _patch_heavy_constructors(reader_duration_ms=12345) + [
+            patch("talking_parrot.cli.MediaHasher.hash", return_value="deadbeef"),
+        ]
+        _enter_all(patches)
+        try:
+            _run_main_with_args(
+                monkeypatch,
+                [
+                    "talking-parrot",
+                    str(media),
+                    "--config",
+                    str(config_yaml),
+                    "--output",
+                    str(json_out),
+                ],
+            )
+        finally:
+            _exit_all(patches)
+
+        import json
+
+        payload = json.loads(json_out.read_text(encoding="utf-8"))
+        assert payload["media"]["duration_ms"] == 12345
+
+    def test_probe_failure_exits_before_pipeline_runs(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        config_yaml = tmp_path / "cfg.yaml"
+        json_out = tmp_path / "project.json"
+        config_yaml.write_text(_yaml_text_no_export(""), encoding="utf-8")
+        media = tmp_path / "missing.mp4"
+        # Note: do NOT create the media file — probe must fail.
+
+        run_patch = patch("talking_parrot.cli.PipelineOrchestrator.run")
+        reader_patch = patch(
+            "talking_parrot.cli.FfmpegAudioReader",
+            side_effect=FileNotFoundError("no such file"),
+        )
+        patches = [reader_patch, run_patch]
+        entered = _enter_all(patches)
+        run_mock = entered[1]
+        try:
+            with pytest.raises(SystemExit):
+                _run_main_with_args(
+                    monkeypatch,
+                    [
+                        "talking-parrot",
+                        str(media),
+                        "--config",
+                        str(config_yaml),
+                        "--output",
+                        str(json_out),
+                    ],
+                )
+        finally:
+            _exit_all(patches)
+
+        run_mock.assert_not_called()
+        assert not json_out.exists()

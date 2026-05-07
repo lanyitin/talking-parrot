@@ -1,4 +1,7 @@
 {
+  "enabledPlugins": {
+    "obsidian@obsidian-skills": true
+  },
   "env": {
     "CLAUDE_CODE_SPAWN_BACKEND": "tmux"
   },
@@ -10,9 +13,6 @@
       "Bash(spectra validate *)",
       "Bash(spectra park *)"
     ]
-  },
-  "enabledPlugins": {
-    "obsidian@obsidian-skills": true
   },
   "teammateMode": "tmux"
 }

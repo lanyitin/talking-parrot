@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import functools
+import os
 
 import ffmpeg
 
@@ -39,6 +39,11 @@ class FfmpegAudioReader(AudioReader):
     @property
     def sample_rate(self) -> int:
         return self._SAMPLE_RATE
+
+    @property
+    def duration_ms(self) -> int:
+        """Total audio duration in milliseconds, probed via ``ffmpeg.probe`` at construction."""
+        return self._duration_ms
 
     def read(self, start_ms: int, end_ms: int) -> bytes:
         if start_ms < 0 or start_ms >= end_ms or end_ms > self._duration_ms:

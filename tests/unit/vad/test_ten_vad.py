@@ -22,12 +22,13 @@ def _make_pcm_bytes(num_samples: int) -> bytes:
 
 
 def _make_mock_ten_vad_cls(probability: float = 0.87) -> MagicMock:
-    """Return a mock TenVad class whose ``process()`` returns (probability, 0)."""
-    result_mock = MagicMock()
-    result_mock.probability = probability
+    """Return a mock TenVad class whose ``process()`` returns ``(probability, 0)``.
 
+    Mirrors the real ``ten_vad.TenVad.process`` API which returns a
+    ``(probability, flags)`` tuple.
+    """
     instance_mock = MagicMock()
-    instance_mock.process.return_value = result_mock
+    instance_mock.process.return_value = (probability, 0)
 
     cls_mock = MagicMock(return_value=instance_mock)
     return cls_mock

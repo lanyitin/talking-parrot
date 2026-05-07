@@ -1514,11 +1514,6 @@ dev = [
 ]
 
 [[package]]
-name = "ten-vad"
-version = "1.0.6.8"
-source = { git = "https://github.com/TEN-framework/ten-vad.git#22a3bcd4509d0faaa8eef4881e8af5f39c178950" }
-
-[[package]]
 name = "tiktoken"
 version = "0.12.0"
 source = { registry = "https://pypi.org/simple" }

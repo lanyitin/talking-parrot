@@ -63,7 +63,7 @@ class TranscribingStep(BaseModel):
     model_config = {"extra": "forbid"}
 
     condition: str
-    backend: str
+    backend: Optional[str] = None
     model: str = "base"
     language: Optional[str] = None
 
