@@ -117,6 +117,11 @@ class PostProcessingConfig(BaseModel):
         japanese_split_no_leading_finals: Sentence-final / inflection
             characters that may not appear as the first character of a
             post-split cue when preceded by hiragana / kanji.
+        split_time_snap_radius_ms: Search radius (in milliseconds) used by
+            ``VadAlignedSplitTimePolicy`` when nudging split-cue timestamps
+            toward the nearest VAD silence midpoint. Must be in
+            ``[0, 2000]``. ``0`` disables snapping (factory selects
+            ``LinearSplitTimePolicy``).
     """
 
     model_config = {"extra": "forbid"}
@@ -191,6 +196,18 @@ class PostProcessingConfig(BaseModel):
     japanese_split_no_leading_finals: list[str] = Field(
         default_factory=lambda: ["た", "だ", "る", "い"]
     )
+    split_time_snap_radius_ms: int = 250
+
+    @field_validator("split_time_snap_radius_ms")
+    @classmethod
+    def _split_time_snap_radius_ms_in_range(cls, v: int) -> int:
+        """Validate that ``split_time_snap_radius_ms`` lies in ``[0, 2000]``."""
+        if not (0 <= v <= 2000):
+            raise ValueError(
+                f"split_time_snap_radius_ms ({v}) must be in the closed "
+                "interval [0, 2000]"
+            )
+        return v
 
     @field_validator("japanese_split_search_radius")
     @classmethod

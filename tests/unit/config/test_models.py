@@ -385,6 +385,34 @@ class TestPostProcessingConfigJapaneseSplitBoundaryFields:
         )
 
 
+class TestPostProcessingConfigSplitTimeSnapRadiusField:
+    """Defaults and validation for `split_time_snap_radius_ms`."""
+
+    def test_default_split_time_snap_radius_ms(self):
+        """`split_time_snap_radius_ms` defaults to 250."""
+        assert PostProcessingConfig().split_time_snap_radius_ms == 250
+
+    def test_split_time_snap_radius_ms_zero_accepted(self):
+        """Boundary: `split_time_snap_radius_ms=0` MUST be accepted (disables snapping)."""
+        cfg = PostProcessingConfig(split_time_snap_radius_ms=0)
+        assert cfg.split_time_snap_radius_ms == 0
+
+    def test_split_time_snap_radius_ms_max_accepted(self):
+        """Boundary: `split_time_snap_radius_ms=2000` MUST be accepted."""
+        cfg = PostProcessingConfig(split_time_snap_radius_ms=2000)
+        assert cfg.split_time_snap_radius_ms == 2000
+
+    def test_split_time_snap_radius_ms_negative_rejected(self):
+        """`split_time_snap_radius_ms=-1` MUST raise `ValidationError`."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(split_time_snap_radius_ms=-1)
+
+    def test_split_time_snap_radius_ms_above_max_rejected(self):
+        """`split_time_snap_radius_ms=2001` MUST raise `ValidationError`."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(split_time_snap_radius_ms=2001)
+
+
 class TestHallucinationFilterAllRulesDisabled:
     """Reject `enabled=True` while every per-rule toggle is False (silent no-op guard)."""
 

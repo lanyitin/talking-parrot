@@ -15,6 +15,10 @@ from talking_parrot.post_processing.split_policy import (
     LinearSplitBoundaryPolicy,
     SplitBoundaryPolicy,
 )
+from talking_parrot.post_processing.split_time_policy import (
+    LinearSplitTimePolicy,
+    SplitTimePolicy,
+)
 
 if TYPE_CHECKING:
     from talking_parrot.config.models import PostProcessingConfig
@@ -64,9 +68,14 @@ class CharacterBoundaryMergeProcessor(SubtitleProcessor):
 class CharacterBoundarySplitProcessor(SubtitleProcessor):
     """Split oversized cues using linear interpolation on character indices."""
 
-    def __init__(self, policy: SplitBoundaryPolicy | None = None) -> None:
-        """Capture the split-boundary policy (default: linear / no-op)."""
+    def __init__(
+        self,
+        policy: SplitBoundaryPolicy | None = None,
+        time_policy: SplitTimePolicy | None = None,
+    ) -> None:
+        """Capture the split-boundary and split-time policies (default: linear)."""
         self._policy: SplitBoundaryPolicy = policy or LinearSplitBoundaryPolicy()
+        self._time_policy: SplitTimePolicy = time_policy or LinearSplitTimePolicy()
 
     def process(
         self, subtitles: list[Subtitle], config: "PostProcessingConfig"
@@ -93,22 +102,43 @@ class CharacterBoundarySplitProcessor(SubtitleProcessor):
             n = math.ceil(duration / config.split_max_duration_ms)
             text_len = len(sub.text)
             radius = config.japanese_split_search_radius
+
+            time_boundaries: list[int] = [sub.start_ms]
+            for i in range(1, n):
+                linear_ms = sub.start_ms + (i * duration) // n
+                snapped = self._time_policy.adjust(linear_ms, sub.start_ms, sub.end_ms)
+                if snapped <= time_boundaries[-1]:
+                    logger.debug(
+                        "CharacterBoundarySplitProcessor: time-boundary collision",
+                        cue_index=sub.index,
+                        slice_index=i,
+                    )
+                    snapped = time_boundaries[-1] + 1
+                time_boundaries.append(snapped)
+            if sub.end_ms <= time_boundaries[-1]:
+                logger.debug(
+                    "CharacterBoundarySplitProcessor: time-boundary collision",
+                    cue_index=sub.index,
+                    slice_index=n,
+                )
+                time_boundaries.append(time_boundaries[-1] + 1)
+            else:
+                time_boundaries.append(sub.end_ms)
+
             prev_char = 0
             for i in range(n):
-                slice_start_ms = sub.start_ms + (i * duration) // n
-                slice_end_ms = sub.start_ms + ((i + 1) * duration) // n
-                # D6 character-boundary: char_idx via linear interpolation on
-                # the slice's end time, relative to cue duration.
+                slice_start_ms = time_boundaries[i]
+                slice_end_ms = time_boundaries[i + 1]
                 if i == n - 1:
                     char_end = text_len
                 else:
                     candidate = round(
-                        (slice_end_ms - sub.start_ms) / duration * text_len
+                        ((sub.start_ms + ((i + 1) * duration) // n) - sub.start_ms)
+                        / duration
+                        * text_len
                     )
                     char_end = self._policy.adjust(sub.text, candidate, radius)
                 if char_end == prev_char:
-                    # Two consecutive slices snapped to the same index: emit
-                    # an empty-text child preserving the time-span invariant.
                     logger.debug(
                         "CharacterBoundarySplitProcessor: empty slice from policy snap",
                         cue_index=sub.index,

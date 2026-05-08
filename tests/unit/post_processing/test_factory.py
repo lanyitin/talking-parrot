@@ -319,3 +319,130 @@ class TestFactorySplitBoundaryPolicyInjection:
         results = [_tr(0, 0, 1000, "hello", aligned_tokens=[])]
         # Must not raise.
         factory.create(AlignmentGranularity.WORD, _ctx(results, expected_language="ja"))
+
+
+def _ctx_with_vad(
+    vad_segments: list,
+    expected_language: str = "en",
+    radius_ms: int = 250,
+) -> PipelineContext:
+    """Build a PipelineContext with vad_segments and a configured snap radius."""
+    from talking_parrot.config.models import (
+        PostProcessingConfig,
+        TranscribingStep,
+    )
+
+    config = PipelineConfig(
+        expected_language=expected_language,
+        transcribing=[TranscribingStep(condition="true", backend="whisper")],
+        post_processing=PostProcessingConfig(split_time_snap_radius_ms=radius_ms),
+    )
+    media_info = MediaInfo(path=Path("x"), duration_ms=10_000, sha256="0" * 64)
+    return PipelineContext(
+        config=config,
+        media_info=media_info,
+        vad_segments=vad_segments,
+    )
+
+
+def _vad(start_ms: int, end_ms: int):
+    from talking_parrot.models.vad import VadSegment
+
+    return VadSegment(
+        start_ms=start_ms,
+        end_ms=end_ms,
+        ten_vad_prob=0.9,
+        silero_vad_prob=0.9,
+        composite_score=0.9,
+    )
+
+
+class TestFactorySplitTimePolicyInjection:
+    """`DefaultGranularityAwareProcessorFactory` injects SplitTimePolicy."""
+
+    def test_character_with_vad_and_radius_injects_vad_aligned_policy(self):
+        from talking_parrot.post_processing.split_time_policy import (
+            VadAlignedSplitTimePolicy,
+        )
+
+        ctx = _ctx_with_vad([_vad(0, 1000), _vad(1500, 3000)], radius_ms=250)
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(AlignmentGranularity.CHARACTER, ctx)
+        split = next(p for p in out if isinstance(p, CharacterBoundarySplitProcessor))
+        assert isinstance(split._time_policy, VadAlignedSplitTimePolicy)
+
+    def test_none_granularity_with_vad_injects_vad_aligned_policy(self):
+        from talking_parrot.post_processing.split_time_policy import (
+            VadAlignedSplitTimePolicy,
+        )
+
+        ctx = _ctx_with_vad([_vad(0, 1000), _vad(1500, 3000)], radius_ms=250)
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(None, ctx)
+        split = next(p for p in out if isinstance(p, TimeBasedSplitProcessor))
+        assert isinstance(split._time_policy, VadAlignedSplitTimePolicy)
+
+    def test_empty_vad_segments_injects_linear_time_policy(self):
+        from talking_parrot.post_processing.split_time_policy import (
+            LinearSplitTimePolicy,
+        )
+
+        ctx = _ctx_with_vad([], radius_ms=250)
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(AlignmentGranularity.CHARACTER, ctx)
+        split = next(p for p in out if isinstance(p, CharacterBoundarySplitProcessor))
+        assert isinstance(split._time_policy, LinearSplitTimePolicy)
+
+    def test_zero_radius_injects_linear_time_policy(self):
+        from talking_parrot.post_processing.split_time_policy import (
+            LinearSplitTimePolicy,
+        )
+
+        ctx = _ctx_with_vad([_vad(0, 1000), _vad(1500, 3000)], radius_ms=0)
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(None, ctx)
+        split = next(p for p in out if isinstance(p, TimeBasedSplitProcessor))
+        assert isinstance(split._time_policy, LinearSplitTimePolicy)
+
+    def test_word_granularity_no_time_policy_passed(self):
+        """`WordBoundarySplitProcessor` MUST NOT receive a `time_policy` keyword."""
+        import inspect
+
+        sig = inspect.signature(WordBoundarySplitProcessor.__init__)
+        assert "time_policy" not in sig.parameters
+
+    def test_non_positive_gaps_are_filtered(self):
+        """Back-to-back or overlapping segments yield no silences → linear fallback."""
+        from talking_parrot.post_processing.split_time_policy import (
+            LinearSplitTimePolicy,
+        )
+
+        ctx = _ctx_with_vad(
+            [_vad(0, 1000), _vad(1000, 2000), _vad(1900, 3000)], radius_ms=250
+        )
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(None, ctx)
+        split = next(p for p in out if isinstance(p, TimeBasedSplitProcessor))
+        # All gaps non-positive → no silences → fallback to linear policy.
+        assert isinstance(split._time_policy, LinearSplitTimePolicy)
+        assert split._time_policy.adjust(1500, 0, 3000) == 1500
+
+    def test_boundary_and_time_policies_passed_in_same_call(self):
+        """Both `policy` and `time_policy` MUST be on the same constructor call."""
+        from talking_parrot.post_processing.japanese import (
+            JapaneseSplitBoundaryPolicy,
+        )
+        from talking_parrot.post_processing.split_time_policy import (
+            VadAlignedSplitTimePolicy,
+        )
+
+        ctx = _ctx_with_vad(
+            [_vad(0, 1000), _vad(1500, 3000)],
+            expected_language="ja",
+            radius_ms=250,
+        )
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(AlignmentGranularity.CHARACTER, ctx)
+        split = next(p for p in out if isinstance(p, CharacterBoundarySplitProcessor))
+        assert isinstance(split._policy, JapaneseSplitBoundaryPolicy)
+        assert isinstance(split._time_policy, VadAlignedSplitTimePolicy)

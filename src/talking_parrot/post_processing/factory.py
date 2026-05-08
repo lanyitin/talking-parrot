@@ -37,6 +37,11 @@ from talking_parrot.post_processing.split_policy import (
     LinearSplitBoundaryPolicy,
     SplitBoundaryPolicy,
 )
+from talking_parrot.post_processing.split_time_policy import (
+    LinearSplitTimePolicy,
+    SplitTimePolicy,
+    VadAlignedSplitTimePolicy,
+)
 from talking_parrot.post_processing.time_based import (
     TimeBasedMergeProcessor,
     TimeBasedSplitProcessor,
@@ -102,13 +107,19 @@ class DefaultGranularityAwareProcessorFactory(GranularityAwareProcessorFactory):
             logger.debug("factory: CHARACTER path")
             core = [
                 CharacterBoundaryMergeProcessor(),
-                CharacterBoundarySplitProcessor(policy=self._build_policy(ctx)),
+                CharacterBoundarySplitProcessor(
+                    policy=self._build_policy(ctx),
+                    time_policy=self._build_time_policy(ctx),
+                ),
             ]
         elif granularity is None:
             logger.debug("factory: time-based fallback path")
             core = [
                 TimeBasedMergeProcessor(),
-                TimeBasedSplitProcessor(policy=self._build_policy(ctx)),
+                TimeBasedSplitProcessor(
+                    policy=self._build_policy(ctx),
+                    time_policy=self._build_time_policy(ctx),
+                ),
             ]
         else:
             # Unknown granularity — guard the OCP closure point.
@@ -144,6 +155,30 @@ class DefaultGranularityAwareProcessorFactory(GranularityAwareProcessorFactory):
             processors.append(JapaneseFillerProcessor())
             processors.append(JapaneseRepetitionProcessor())
         return processors
+
+    @staticmethod
+    def _build_silences(ctx: "PipelineContext") -> list[tuple[int, int]]:
+        """Derive `(start_ms, end_ms)` silence gaps between consecutive VAD segments."""
+        segs = ctx.vad_segments
+        out: list[tuple[int, int]] = []
+        for i in range(len(segs) - 1):
+            gap_start = segs[i].end_ms
+            gap_end = segs[i + 1].start_ms
+            if gap_end > gap_start:
+                out.append((gap_start, gap_end))
+        return out
+
+    @staticmethod
+    def _build_time_policy(ctx: "PipelineContext") -> SplitTimePolicy:
+        """Pick the SplitTimePolicy based on VAD silences and configured radius."""
+        pp = ctx.config.post_processing or PostProcessingConfig()
+        radius_ms = pp.split_time_snap_radius_ms
+        silences = DefaultGranularityAwareProcessorFactory._build_silences(ctx)
+        if radius_ms > 0 and silences:
+            return VadAlignedSplitTimePolicy(
+                silences=silences, search_radius_ms=radius_ms
+            )
+        return LinearSplitTimePolicy()
 
     @staticmethod
     def _build_policy(ctx: "PipelineContext") -> SplitBoundaryPolicy:

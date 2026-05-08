@@ -19,6 +19,10 @@ from talking_parrot.post_processing.split_policy import (
     LinearSplitBoundaryPolicy,
     SplitBoundaryPolicy,
 )
+from talking_parrot.post_processing.split_time_policy import (
+    LinearSplitTimePolicy,
+    SplitTimePolicy,
+)
 
 if TYPE_CHECKING:
     from talking_parrot.config.models import PostProcessingConfig
@@ -68,9 +72,14 @@ class TimeBasedMergeProcessor(SubtitleProcessor):
 class TimeBasedSplitProcessor(SubtitleProcessor):
     """Split oversized cues into ``ceil(duration / cap)`` equal-time slices."""
 
-    def __init__(self, policy: SplitBoundaryPolicy | None = None) -> None:
-        """Capture the split-boundary policy (default: linear / no-op)."""
+    def __init__(
+        self,
+        policy: SplitBoundaryPolicy | None = None,
+        time_policy: SplitTimePolicy | None = None,
+    ) -> None:
+        """Capture the split-boundary and split-time policies (default: linear)."""
         self._policy: SplitBoundaryPolicy = policy or LinearSplitBoundaryPolicy()
+        self._time_policy: SplitTimePolicy = time_policy or LinearSplitTimePolicy()
 
     def process(
         self, subtitles: list[Subtitle], config: "PostProcessingConfig"
@@ -97,19 +106,39 @@ class TimeBasedSplitProcessor(SubtitleProcessor):
             n = math.ceil(duration / config.split_max_duration_ms)
             text_len = len(sub.text)
             radius = config.japanese_split_search_radius
-            # Compute adjusted boundaries first so we can detect equal
-            # consecutive indices and emit empty-text children for collisions.
-            boundaries: list[int] = [0]
+            text_boundaries: list[int] = [0]
             for i in range(1, n):
                 candidate = round(i / n * text_len)
                 adjusted = self._policy.adjust(sub.text, candidate, radius)
-                boundaries.append(adjusted)
-            boundaries.append(text_len)
+                text_boundaries.append(adjusted)
+            text_boundaries.append(text_len)
+
+            time_boundaries: list[int] = [sub.start_ms]
+            for i in range(1, n):
+                linear_ms = sub.start_ms + (i * duration) // n
+                snapped = self._time_policy.adjust(linear_ms, sub.start_ms, sub.end_ms)
+                if snapped <= time_boundaries[-1]:
+                    logger.debug(
+                        "TimeBasedSplitProcessor: time-boundary collision",
+                        cue_index=sub.index,
+                        slice_index=i,
+                    )
+                    snapped = time_boundaries[-1] + 1
+                time_boundaries.append(snapped)
+            if sub.end_ms <= time_boundaries[-1]:
+                logger.debug(
+                    "TimeBasedSplitProcessor: time-boundary collision",
+                    cue_index=sub.index,
+                    slice_index=n,
+                )
+                time_boundaries.append(time_boundaries[-1] + 1)
+            else:
+                time_boundaries.append(sub.end_ms)
 
             for i in range(n):
-                slice_start = sub.start_ms + (i * duration) // n
-                slice_end = sub.start_ms + ((i + 1) * duration) // n
-                lo, hi = boundaries[i], boundaries[i + 1]
+                slice_start = time_boundaries[i]
+                slice_end = time_boundaries[i + 1]
+                lo, hi = text_boundaries[i], text_boundaries[i + 1]
                 if hi == lo and i > 0:
                     logger.debug(
                         "TimeBasedSplitProcessor: empty slice from policy snap",
@@ -121,7 +150,7 @@ class TimeBasedSplitProcessor(SubtitleProcessor):
                     piece_text = sub.text[lo:hi]
                 out.append(
                     Subtitle(
-                        index=sub.index,  # placeholder; renumbered below
+                        index=sub.index,
                         start_ms=slice_start,
                         end_ms=slice_end,
                         text=piece_text,

@@ -215,3 +215,90 @@ class TestCharacterBoundarySplitWithPolicy:
         CharacterBoundarySplitProcessor(policy=_Capture()).process([sub], custom_cfg)
         assert captured  # at least one call
         assert all(r == 7 for r in captured)
+
+
+class TestCharacterBoundarySplitWithTimePolicy:
+    """Modified spec: split processor accepts a ``SplitTimePolicy``."""
+
+    def test_default_constructor_uses_linear_time_policy(self, cfg):
+        """No-arg constructor MUST be identical to passing both linear policies."""
+        from talking_parrot.post_processing.split_policy import (
+            LinearSplitBoundaryPolicy,
+        )
+        from talking_parrot.post_processing.split_time_policy import (
+            LinearSplitTimePolicy,
+        )
+
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        a = CharacterBoundarySplitProcessor().process([sub], cfg)
+        b = CharacterBoundarySplitProcessor(
+            policy=LinearSplitBoundaryPolicy(),
+            time_policy=LinearSplitTimePolicy(),
+        ).process([sub], cfg)
+        assert a == b
+
+    def test_time_policy_snaps_boundary(self, cfg):
+        """Stub time policy returning 4700 MUST shift slice boundary to 4700."""
+
+        class _SnapTo4700:
+            def adjust(
+                self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int
+            ) -> int:
+                return 4700
+
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        out = CharacterBoundarySplitProcessor(time_policy=_SnapTo4700()).process(
+            [sub], cfg
+        )
+        assert len(out) == 2
+        assert (out[0].start_ms, out[0].end_ms) == (0, 4700)
+        assert (out[1].start_ms, out[1].end_ms) == (4700, 9000)
+        assert out[0].text + out[1].text == "あいうえおかきくけこ"
+
+    def test_time_policy_not_called_when_text_too_short(self, cfg):
+        """Time policy MUST NOT be invoked when ``len(text) <= 1``."""
+
+        calls: list[tuple[int, int, int]] = []
+
+        class _SpyTime:
+            def adjust(
+                self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int
+            ) -> int:
+                calls.append((candidate_ms, cue_start_ms, cue_end_ms))
+                return candidate_ms
+
+        sub = Subtitle(index=3, start_ms=0, end_ms=9000, text="。")
+        CharacterBoundarySplitProcessor(time_policy=_SpyTime()).process([sub], cfg)
+        assert calls == []
+
+    def test_time_boundary_collision_emits_1ms_minimum_slice(self, cfg, caplog):
+        """If time policy snaps two adjacent boundaries to same value, emit 1ms slice."""
+
+        class _AlwaysCollide:
+            def adjust(
+                self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int
+            ) -> int:
+                return 8000
+
+        custom_cfg = PostProcessingConfig(
+            max_line_length=20,
+            max_lines_per_subtitle=2,
+            merge_gap_threshold_ms=200,
+            merge_max_duration_ms=4000,
+            split_max_duration_ms=4000,
+        )
+        # n = ceil(12000 / 4000) = 3 slices, two inner boundaries.
+        sub = Subtitle(
+            index=1, start_ms=0, end_ms=12000, text="あいうえおかきくけこさし"
+        )
+        with caplog.at_level(logging.DEBUG, logger="talking_parrot.post_processing"):
+            out = CharacterBoundarySplitProcessor(time_policy=_AlwaysCollide()).process(
+                [sub], custom_cfg
+            )
+        assert len(out) == 3
+        assert (out[0].start_ms, out[0].end_ms) == (0, 8000)
+        assert (out[1].start_ms, out[1].end_ms) == (8000, 8001)
+        assert (out[2].start_ms, out[2].end_ms) == (8001, 12000)
+        assert any(
+            r.levelno == logging.DEBUG and "1" in r.getMessage() for r in caplog.records
+        )
