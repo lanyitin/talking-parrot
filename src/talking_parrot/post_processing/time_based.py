@@ -15,6 +15,10 @@ from typing import TYPE_CHECKING
 
 from talking_parrot.models.subtitle import Subtitle
 from talking_parrot.post_processing.base import SubtitleProcessor, _renumber
+from talking_parrot.post_processing.split_policy import (
+    LinearSplitBoundaryPolicy,
+    SplitBoundaryPolicy,
+)
 
 if TYPE_CHECKING:
     from talking_parrot.config.models import PostProcessingConfig
@@ -64,6 +68,10 @@ class TimeBasedMergeProcessor(SubtitleProcessor):
 class TimeBasedSplitProcessor(SubtitleProcessor):
     """Split oversized cues into ``ceil(duration / cap)`` equal-time slices."""
 
+    def __init__(self, policy: SplitBoundaryPolicy | None = None) -> None:
+        """Capture the split-boundary policy (default: linear / no-op)."""
+        self._policy: SplitBoundaryPolicy = policy or LinearSplitBoundaryPolicy()
+
     def process(
         self, subtitles: list[Subtitle], config: "PostProcessingConfig"
     ) -> list[Subtitle]:
@@ -88,12 +96,29 @@ class TimeBasedSplitProcessor(SubtitleProcessor):
 
             n = math.ceil(duration / config.split_max_duration_ms)
             text_len = len(sub.text)
+            radius = config.japanese_split_search_radius
+            # Compute adjusted boundaries first so we can detect equal
+            # consecutive indices and emit empty-text children for collisions.
+            boundaries: list[int] = [0]
+            for i in range(1, n):
+                candidate = round(i / n * text_len)
+                adjusted = self._policy.adjust(sub.text, candidate, radius)
+                boundaries.append(adjusted)
+            boundaries.append(text_len)
+
             for i in range(n):
                 slice_start = sub.start_ms + (i * duration) // n
                 slice_end = sub.start_ms + ((i + 1) * duration) // n
-                char_start = round(i / n * text_len)
-                char_end = round((i + 1) / n * text_len)
-                piece_text = sub.text[char_start:char_end]
+                lo, hi = boundaries[i], boundaries[i + 1]
+                if hi == lo and i > 0:
+                    logger.debug(
+                        "TimeBasedSplitProcessor: empty slice from policy snap",
+                        cue_index=sub.index,
+                        slice_index=i,
+                    )
+                    piece_text = ""
+                else:
+                    piece_text = sub.text[lo:hi]
                 out.append(
                     Subtitle(
                         index=sub.index,  # placeholder; renumbered below

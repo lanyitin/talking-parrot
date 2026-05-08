@@ -107,3 +107,111 @@ class TestCharacterBoundaryConstructorSurface:
         sig = inspect.signature(CharacterBoundarySplitProcessor.__init__)
         params = [p for p in sig.parameters if p != "self"]
         assert "token_map_by_index" not in params
+
+
+class TestCharacterBoundarySplitWithPolicy:
+    """Modified spec: split processor accepts a ``SplitBoundaryPolicy``."""
+
+    def test_default_constructor_uses_linear_policy(self, cfg):
+        """No-arg constructor MUST be identical to ``LinearSplitBoundaryPolicy``."""
+        from talking_parrot.post_processing.split_policy import (
+            LinearSplitBoundaryPolicy,
+        )
+
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        a = CharacterBoundarySplitProcessor().process([sub], cfg)
+        b = CharacterBoundarySplitProcessor(policy=LinearSplitBoundaryPolicy()).process(
+            [sub], cfg
+        )
+        assert a == b
+
+    def test_policy_adjusts_text_but_not_time(self, cfg):
+        """A stub policy adding +1 shifts text-split index but not timestamps."""
+
+        class _PlusOne:
+            def adjust(
+                self, text: str, candidate_index: int, search_radius: int
+            ) -> int:
+                return candidate_index + 1
+
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        out = CharacterBoundarySplitProcessor(policy=_PlusOne()).process([sub], cfg)
+        # split_max_duration_ms=6000, duration=9000 → n=2 slices
+        assert len(out) == 2
+        # Time positions unchanged: 0, 4500, 9000
+        assert out[0].start_ms == 0
+        assert out[0].end_ms == 4500
+        assert out[1].start_ms == 4500
+        assert out[1].end_ms == 9000
+        # Text-split point shifted from 5 → 6 (round(4500/9000*10) + 1 = 6)
+        assert out[0].text == "あいうえおか"
+        assert out[1].text == "きくけこ"
+
+    def test_policy_not_called_when_text_too_short(self, cfg):
+        """Policy MUST NOT be invoked when ``len(text) <= 1``."""
+
+        calls: list[tuple[str, int, int]] = []
+
+        class _Spy:
+            def adjust(
+                self, text: str, candidate_index: int, search_radius: int
+            ) -> int:
+                calls.append((text, candidate_index, search_radius))
+                return candidate_index
+
+        sub = Subtitle(index=3, start_ms=0, end_ms=9000, text="。")
+        out = CharacterBoundarySplitProcessor(policy=_Spy()).process([sub], cfg)
+        assert calls == []
+        assert out == [Subtitle(index=1, start_ms=0, end_ms=9000, text="。")]
+
+    def test_equal_consecutive_indices_emit_empty_child_and_log(self, cfg, caplog):
+        """If policy snaps two slices to the same index, second slice gets empty text."""
+
+        class _AlwaysOne:
+            def adjust(
+                self, text: str, candidate_index: int, search_radius: int
+            ) -> int:
+                return 1
+
+        # Duration 18000 with cap 6000 → n=3 slices; policy collapses both
+        # intermediate split points to index 1 → middle slice is empty.
+        sub = Subtitle(index=1, start_ms=0, end_ms=18000, text="あいうえおかきくけこ")
+        with caplog.at_level(logging.DEBUG, logger="talking_parrot.post_processing"):
+            out = CharacterBoundarySplitProcessor(policy=_AlwaysOne()).process(
+                [sub], cfg
+            )
+        assert len(out) == 3
+        assert out[0].text == "あ"
+        assert out[1].text == ""
+        assert out[2].text == "いうえおかきくけこ"
+        assert out[0].start_ms == 0
+        assert out[2].end_ms == 18000
+        # DEBUG log emitted naming the cue index.
+        assert any(
+            r.levelno == logging.DEBUG and "1" in r.getMessage() for r in caplog.records
+        )
+
+    def test_policy_receives_search_radius_from_config(self, cfg):
+        """Processor MUST pass ``config.japanese_split_search_radius`` as radius."""
+
+        captured: list[int] = []
+
+        class _Capture:
+            def adjust(
+                self, text: str, candidate_index: int, search_radius: int
+            ) -> int:
+                captured.append(search_radius)
+                return candidate_index
+
+        custom_cfg = PostProcessingConfig(
+            max_line_length=20,
+            max_lines_per_subtitle=2,
+            merge_gap_threshold_ms=200,
+            merge_max_duration_ms=6000,
+            split_max_duration_ms=6000,
+            japanese_split_search_radius=7,
+        )
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        CharacterBoundarySplitProcessor(policy=_Capture()).process([sub], custom_cfg)
+        assert captured  # at least one call
+        assert all(r == 7 for r in captured)

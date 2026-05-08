@@ -26,10 +26,16 @@ from talking_parrot.post_processing.character_boundary import (
     CharacterBoundaryMergeProcessor,
     CharacterBoundarySplitProcessor,
 )
+from talking_parrot.config.models import PostProcessingConfig
 from talking_parrot.post_processing.dedup import DedupSubtitleProcessor
 from talking_parrot.post_processing.japanese import (
     JapaneseFillerProcessor,
     JapaneseRepetitionProcessor,
+    JapaneseSplitBoundaryPolicy,
+)
+from talking_parrot.post_processing.split_policy import (
+    LinearSplitBoundaryPolicy,
+    SplitBoundaryPolicy,
 )
 from talking_parrot.post_processing.time_based import (
     TimeBasedMergeProcessor,
@@ -96,13 +102,13 @@ class DefaultGranularityAwareProcessorFactory(GranularityAwareProcessorFactory):
             logger.debug("factory: CHARACTER path")
             core = [
                 CharacterBoundaryMergeProcessor(),
-                CharacterBoundarySplitProcessor(),
+                CharacterBoundarySplitProcessor(policy=self._build_policy(ctx)),
             ]
         elif granularity is None:
             logger.debug("factory: time-based fallback path")
             core = [
                 TimeBasedMergeProcessor(),
-                TimeBasedSplitProcessor(),
+                TimeBasedSplitProcessor(policy=self._build_policy(ctx)),
             ]
         else:
             # Unknown granularity — guard the OCP closure point.
@@ -138,6 +144,20 @@ class DefaultGranularityAwareProcessorFactory(GranularityAwareProcessorFactory):
             processors.append(JapaneseFillerProcessor())
             processors.append(JapaneseRepetitionProcessor())
         return processors
+
+    @staticmethod
+    def _build_policy(ctx: "PipelineContext") -> SplitBoundaryPolicy:
+        """Pick the SplitBoundaryPolicy for ``ctx`` based on expected language.
+
+        Returns ``JapaneseSplitBoundaryPolicy`` when ``expected_language ==
+        "ja"`` and ``LinearSplitBoundaryPolicy`` otherwise. Falls back to
+        ``PostProcessingConfig()`` defaults when the pipeline config does
+        not declare a ``post_processing`` section.
+        """
+        if ctx.config.expected_language == "ja":
+            pp = ctx.config.post_processing or PostProcessingConfig()
+            return JapaneseSplitBoundaryPolicy(pp)
+        return LinearSplitBoundaryPolicy()
 
     @staticmethod
     def _build_token_map(

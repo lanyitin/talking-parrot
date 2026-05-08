@@ -254,3 +254,68 @@ class TestFactoryWordTokenMap:
         out = factory.create(AlignmentGranularity.WORD, _ctx(results))
         merge = next(p for p in out if isinstance(p, WordBoundaryMergeProcessor))
         assert merge.token_map_by_index[1] == []
+
+
+class TestFactorySplitBoundaryPolicyInjection:
+    """`DefaultGranularityAwareProcessorFactory` injects SplitBoundaryPolicy."""
+
+    def test_character_japanese_injects_japanese_policy(self):
+        from talking_parrot.post_processing.japanese import (
+            JapaneseSplitBoundaryPolicy,
+        )
+
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(
+            AlignmentGranularity.CHARACTER, _ctx([], expected_language="ja")
+        )
+        split = next(p for p in out if isinstance(p, CharacterBoundarySplitProcessor))
+        assert isinstance(split._policy, JapaneseSplitBoundaryPolicy)
+
+    def test_character_non_japanese_injects_linear_policy(self):
+        from talking_parrot.post_processing.split_policy import (
+            LinearSplitBoundaryPolicy,
+        )
+
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(
+            AlignmentGranularity.CHARACTER, _ctx([], expected_language="en")
+        )
+        split = next(p for p in out if isinstance(p, CharacterBoundarySplitProcessor))
+        assert isinstance(split._policy, LinearSplitBoundaryPolicy)
+
+    def test_none_granularity_japanese_injects_japanese_policy(self):
+        from talking_parrot.post_processing.japanese import (
+            JapaneseSplitBoundaryPolicy,
+        )
+
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(None, _ctx([], expected_language="ja"))
+        split = next(p for p in out if isinstance(p, TimeBasedSplitProcessor))
+        assert isinstance(split._policy, JapaneseSplitBoundaryPolicy)
+
+    def test_none_granularity_non_japanese_injects_linear_policy(self):
+        from talking_parrot.post_processing.split_policy import (
+            LinearSplitBoundaryPolicy,
+        )
+
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(None, _ctx([], expected_language="en"))
+        split = next(p for p in out if isinstance(p, TimeBasedSplitProcessor))
+        assert isinstance(split._policy, LinearSplitBoundaryPolicy)
+
+    def test_word_granularity_no_policy_passed(self):
+        """`WordBoundarySplitProcessor` MUST NOT receive a policy keyword."""
+        import inspect
+
+        sig = inspect.signature(WordBoundarySplitProcessor.__init__)
+        params = sig.parameters
+        # The constructor must not have a `policy` kwarg in the first place,
+        # which is the structural guarantee that the factory cannot pass one.
+        assert "policy" not in params
+
+    def test_word_granularity_works_for_japanese_language(self):
+        """WORD path with `expected_language='ja'` MUST construct without errors."""
+        factory = DefaultGranularityAwareProcessorFactory()
+        results = [_tr(0, 0, 1000, "hello", aligned_tokens=[])]
+        # Must not raise.
+        factory.create(AlignmentGranularity.WORD, _ctx(results, expected_language="ja"))

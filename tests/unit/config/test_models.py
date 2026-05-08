@@ -147,6 +147,16 @@ class TestPostProcessingConfigDefaults:
         with pytest.raises(pydantic.ValidationError):
             PostProcessingConfig(unknown=1)  # type: ignore
 
+    def test_default_japanese_filler_words_excludes_bare_sono(self):
+        """Default `japanese_filler_words` MUST NOT contain bare `その`.
+
+        Regression for change ``investigate-japanese-demonstrative-drop``:
+        the bare demonstrative collides with content words.
+        """
+        defaults = PostProcessingConfig().japanese_filler_words
+        assert "その" not in defaults
+        assert "そのー" in defaults
+
 
 class TestPostProcessingConfigMergeLeSplitValidator:
     """Validator from D7 / D8: merge_max_duration_ms <= split_max_duration_ms."""
@@ -233,16 +243,10 @@ class TestPostProcessingConfigDedupAndJapaneseFields:
         assert cfg.japanese_filler_enabled is True
         assert cfg.japanese_repetition_enabled is True
         assert cfg.japanese_filler_words == [
-            "あの",
             "あのー",
-            "えっと",
             "えーと",
             "えー",
-            "まあ",
             "そのー",
-            "その",
-            "なんか",
-            "ね",
         ]
         assert cfg.japanese_onomatopoeia_whitelist == [
             "どきどき",
@@ -305,6 +309,80 @@ class TestPostProcessingConfigDedupAndJapaneseFields:
         """`dedup_max_gap_ms=60_001` MUST raise `ValidationError`."""
         with pytest.raises(pydantic.ValidationError):
             PostProcessingConfig(dedup_max_gap_ms=60_001)
+
+
+class TestPostProcessingConfigJapaneseSplitBoundaryFields:
+    """Defaults and validators for the Japanese split-boundary fields."""
+
+    def test_default_japanese_split_search_radius(self):
+        """`japanese_split_search_radius` defaults to 4."""
+        assert PostProcessingConfig().japanese_split_search_radius == 4
+
+    def test_default_no_split_units_contains_expected(self):
+        """Defaults MUST contain the spec-required units."""
+        units = PostProcessingConfig().japanese_split_no_split_units
+        for u in ("まし", "です", "よう"):
+            assert u in units
+
+    def test_default_no_leading_particles_contains_expected(self):
+        """Defaults MUST contain the spec-required particles."""
+        particles = PostProcessingConfig().japanese_split_no_leading_particles
+        for p in ("に", "を", "の"):
+            assert p in particles
+
+    def test_default_no_leading_finals_contains_expected(self):
+        """Defaults MUST contain the spec-required finals."""
+        finals = PostProcessingConfig().japanese_split_no_leading_finals
+        for f in ("た", "い"):
+            assert f in finals
+
+    def test_japanese_split_search_radius_above_max_rejected(self):
+        """`japanese_split_search_radius=21` MUST raise `ValidationError`."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(japanese_split_search_radius=25)
+
+    def test_japanese_split_search_radius_negative_rejected(self):
+        """Negative search radius MUST raise `ValidationError`."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(japanese_split_search_radius=-1)
+
+    def test_japanese_split_search_radius_zero_accepted(self):
+        """Boundary: `japanese_split_search_radius=0` MUST be accepted."""
+        cfg = PostProcessingConfig(japanese_split_search_radius=0)
+        assert cfg.japanese_split_search_radius == 0
+
+    def test_japanese_split_search_radius_twenty_accepted(self):
+        """Boundary: `japanese_split_search_radius=20` MUST be accepted."""
+        cfg = PostProcessingConfig(japanese_split_search_radius=20)
+        assert cfg.japanese_split_search_radius == 20
+
+    def test_no_split_units_empty_string_rejected(self):
+        """Empty entries in `japanese_split_no_split_units` MUST raise."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(japanese_split_no_split_units=["まし", ""])
+
+    def test_no_leading_particles_empty_string_rejected(self):
+        """Empty entries in `japanese_split_no_leading_particles` MUST raise."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(japanese_split_no_leading_particles=["", "に"])
+
+    def test_no_leading_finals_empty_string_rejected(self):
+        """Empty entries in `japanese_split_no_leading_finals` MUST raise."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(japanese_split_no_leading_finals=["た", ""])
+
+    def test_japanese_split_lists_default_factory_isolated(self):
+        """Two instances MUST NOT share the same Japanese-split list objects."""
+        a = PostProcessingConfig()
+        b = PostProcessingConfig()
+        assert a.japanese_split_no_split_units is not b.japanese_split_no_split_units
+        assert (
+            a.japanese_split_no_leading_particles
+            is not b.japanese_split_no_leading_particles
+        )
+        assert (
+            a.japanese_split_no_leading_finals is not b.japanese_split_no_leading_finals
+        )
 
 
 class TestHallucinationFilterAllRulesDisabled:

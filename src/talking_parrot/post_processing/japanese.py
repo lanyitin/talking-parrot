@@ -7,10 +7,11 @@ processors appended only when ``expected_language == "ja"``*.
 Two processors live here:
 
 * :class:`JapaneseFillerProcessor` strips a leading filler token from each
-  cue's text. Default tokens: ``あの``, ``あのー``, ``えっと``, ``えーと``,
-  ``えー``, ``まあ``, ``そのー``, ``その``, ``なんか``, ``ね``. Cues whose
-  text becomes empty after stripping are dropped; survivors are renumbered
-  1-based.
+  cue's text. Default tokens: ``あのー``, ``えーと``, ``えー``, ``そのー``
+  — only prolonged-vowel forms are kept by default because their bare
+  counterparts (e.g. demonstrative ``その``) collide with content words.
+  Cues whose text becomes empty after stripping are dropped; survivors
+  are renumbered 1-based.
 * :class:`JapaneseRepetitionProcessor` collapses any run of three or more
   identical adjacent characters in a cue's text down to exactly two
   characters, with the exception that runs whose underlying two-character
@@ -109,6 +110,13 @@ class JapaneseFillerProcessor(SubtitleProcessor):
             text = sub.text.lstrip()
             match = filler_re.match(text)
             if match is not None:
+                logger.debug(
+                    "JapaneseFillerProcessor: stripping filler",
+                    original_text=sub.text,
+                    matched_filler=match.group(0),
+                    cue_index=sub.index,
+                    start_ms=sub.start_ms,
+                )
                 text = text[match.end() :]
                 # Spec: "After filler removal, leading whitespace SHALL be
                 # stripped." The scenario also expects leading punctuation to
@@ -178,6 +186,112 @@ class JapaneseRepetitionProcessor(SubtitleProcessor):
                 dropped=dropped,
             )
         return _renumber(survivors)
+
+
+def _is_katakana(ch: str) -> bool:
+    """Return True if ``ch`` is a katakana code point per spec."""
+    return ("゠" <= ch <= "ヿ") or ("ㇰ" <= ch <= "ㇿ")
+
+
+def _is_digit(ch: str) -> bool:
+    """Return True if ``ch`` is an ASCII or fullwidth digit."""
+    return ("0" <= ch <= "9") or ("０" <= ch <= "９")
+
+
+def _is_hira_or_kanji(ch: str) -> bool:
+    """Return True if ``ch`` is hiragana or CJK unified ideograph."""
+    return ("぀" <= ch <= "ゟ") or ("一" <= ch <= "鿿")
+
+
+class JapaneseSplitBoundaryPolicy:
+    """Snap a candidate split index to the nearest valid Japanese boundary.
+
+    Constructed from a :class:`PostProcessingConfig` whose
+    ``japanese_split_no_split_units``, ``japanese_split_no_leading_particles``,
+    and ``japanese_split_no_leading_finals`` fields drive the validity rules.
+    See spec ``split-boundary-policy`` (Requirement
+    *JapaneseSplitBoundaryPolicy snaps to nearest valid grammar boundary*).
+    """
+
+    def __init__(self, config: "PostProcessingConfig") -> None:
+        """Capture the configured rule lists."""
+        self._no_split_units: list[str] = list(config.japanese_split_no_split_units)
+        self._no_leading_particles: list[str] = list(
+            config.japanese_split_no_leading_particles
+        )
+        self._no_leading_finals: list[str] = list(
+            config.japanese_split_no_leading_finals
+        )
+
+    def adjust(self, text: str, candidate_index: int, search_radius: int) -> int:
+        """Return the nearest valid boundary index, or ``candidate_index`` if none.
+
+        Args:
+            text: The cue text. Not mutated.
+            candidate_index: The linearly-interpolated candidate, in
+                ``[1, len(text) - 1]``.
+            search_radius: Half-width of the search window; ``0`` is a no-op.
+
+        Returns:
+            An integer in ``[1, len(text) - 1]``.
+        """
+        n = len(text)
+        if n < 2:
+            return candidate_index
+        lo = max(1, candidate_index - search_radius)
+        hi = min(n - 1, candidate_index + search_radius)
+        if lo > hi:
+            return candidate_index
+
+        best_idx: int | None = None
+        best_dist: int = -1
+        for i in range(lo, hi + 1):
+            if not self._is_valid(text, i):
+                continue
+            dist = abs(i - candidate_index)
+            # smallest distance wins; tie → smaller index (loop ascends, so
+            # the first index at a given distance keeps the slot)
+            if best_idx is None or dist < best_dist:
+                best_idx = i
+                best_dist = dist
+        if best_idx is None:
+            return candidate_index
+        return best_idx
+
+    def _is_valid(self, text: str, i: int) -> bool:
+        """Return True if cutting between ``text[i-1]`` and ``text[i]`` is valid."""
+        left = text[i - 1]
+        right = text[i]
+
+        # Mid-katakana
+        if _is_katakana(left) and _is_katakana(right):
+            return False
+        # Mid-digit
+        if _is_digit(left) and _is_digit(right):
+            return False
+        # Mid-no-split-unit: any configured unit u and offset k in [1, len(u)-1]
+        # such that text[i-k : i-k+len(u)] == u.
+        for unit in self._no_split_units:
+            ulen = len(unit)
+            if ulen < 2:
+                continue
+            for k in range(1, ulen):
+                start = i - k
+                end = start + ulen
+                if start < 0 or end > len(text):
+                    continue
+                if text[start:end] == unit:
+                    return False
+        # Leading-particle
+        for particle in self._no_leading_particles:
+            if text.startswith(particle, i):
+                return False
+        # Leading-final (only if previous char is hiragana / kanji)
+        if _is_hira_or_kanji(left):
+            for final in self._no_leading_finals:
+                if text.startswith(final, i):
+                    return False
+        return True
 
 
 def _collapse_repetitions(text: str, whitelist_re: re.Pattern[str] | None) -> str:

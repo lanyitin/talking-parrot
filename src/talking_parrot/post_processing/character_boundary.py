@@ -11,6 +11,10 @@ from typing import TYPE_CHECKING
 
 from talking_parrot.models.subtitle import Subtitle
 from talking_parrot.post_processing.base import SubtitleProcessor, _renumber
+from talking_parrot.post_processing.split_policy import (
+    LinearSplitBoundaryPolicy,
+    SplitBoundaryPolicy,
+)
 
 if TYPE_CHECKING:
     from talking_parrot.config.models import PostProcessingConfig
@@ -60,6 +64,10 @@ class CharacterBoundaryMergeProcessor(SubtitleProcessor):
 class CharacterBoundarySplitProcessor(SubtitleProcessor):
     """Split oversized cues using linear interpolation on character indices."""
 
+    def __init__(self, policy: SplitBoundaryPolicy | None = None) -> None:
+        """Capture the split-boundary policy (default: linear / no-op)."""
+        self._policy: SplitBoundaryPolicy = policy or LinearSplitBoundaryPolicy()
+
     def process(
         self, subtitles: list[Subtitle], config: "PostProcessingConfig"
     ) -> list[Subtitle]:
@@ -84,6 +92,7 @@ class CharacterBoundarySplitProcessor(SubtitleProcessor):
 
             n = math.ceil(duration / config.split_max_duration_ms)
             text_len = len(sub.text)
+            radius = config.japanese_split_search_radius
             prev_char = 0
             for i in range(n):
                 slice_start_ms = sub.start_ms + (i * duration) // n
@@ -93,11 +102,22 @@ class CharacterBoundarySplitProcessor(SubtitleProcessor):
                 if i == n - 1:
                     char_end = text_len
                 else:
-                    char_end = round(
+                    candidate = round(
                         (slice_end_ms - sub.start_ms) / duration * text_len
                     )
-                piece_text = sub.text[prev_char:char_end]
-                prev_char = char_end
+                    char_end = self._policy.adjust(sub.text, candidate, radius)
+                if char_end == prev_char:
+                    # Two consecutive slices snapped to the same index: emit
+                    # an empty-text child preserving the time-span invariant.
+                    logger.debug(
+                        "CharacterBoundarySplitProcessor: empty slice from policy snap",
+                        cue_index=sub.index,
+                        slice_index=i,
+                    )
+                    piece_text = ""
+                else:
+                    piece_text = sub.text[prev_char:char_end]
+                    prev_char = char_end
                 out.append(
                     Subtitle(
                         index=sub.index,

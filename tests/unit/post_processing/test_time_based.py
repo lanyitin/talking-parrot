@@ -130,3 +130,82 @@ class TestTimeBasedSplit:
     def test_empty_input(self, cfg):
         """Empty input returns empty list."""
         assert TimeBasedSplitProcessor().process([], cfg) == []
+
+
+class TestTimeBasedSplitWithPolicy:
+    """Modified spec: `TimeBasedSplitProcessor` accepts a `SplitBoundaryPolicy`."""
+
+    def test_default_constructor_uses_linear_policy(self, cfg):
+        """No-arg constructor MUST be identical to `LinearSplitBoundaryPolicy`."""
+        from talking_parrot.post_processing.split_policy import (
+            LinearSplitBoundaryPolicy,
+        )
+
+        sub = Subtitle(index=1, start_ms=0, end_ms=12000, text="the quick brown fox")
+        a = TimeBasedSplitProcessor().process([sub], cfg)
+        b = TimeBasedSplitProcessor(policy=LinearSplitBoundaryPolicy()).process(
+            [sub], cfg
+        )
+        assert a == b
+
+    def test_policy_adjusts_text_split(self, cfg):
+        """A stub policy adding +1 shifts text-split index but not timestamps."""
+
+        class _PlusOne:
+            def adjust(
+                self, text: str, candidate_index: int, search_radius: int
+            ) -> int:
+                return candidate_index + 1
+
+        # 19 chars, 12s, cap 6s → n=2, candidate1 = round(1/2*19) = 10
+        sub = Subtitle(index=1, start_ms=0, end_ms=12000, text="the quick brown fox")
+        out = TimeBasedSplitProcessor(policy=_PlusOne()).process([sub], cfg)
+        assert len(out) == 2
+        assert (out[0].start_ms, out[0].end_ms) == (0, 6000)
+        assert (out[1].start_ms, out[1].end_ms) == (6000, 12000)
+        # First child text length = 11 (=10+1)
+        assert out[0].text == "the quick b"
+        assert out[1].text == "rown fox"
+        assert out[0].text + out[1].text == "the quick brown fox"
+
+    def test_policy_not_called_when_text_too_short(self, cfg):
+        """Policy MUST NOT be invoked when ``len(text) <= 1``."""
+
+        calls: list[tuple[str, int, int]] = []
+
+        class _Spy:
+            def adjust(
+                self, text: str, candidate_index: int, search_radius: int
+            ) -> int:
+                calls.append((text, candidate_index, search_radius))
+                return candidate_index
+
+        sub = Subtitle(index=5, start_ms=0, end_ms=12000, text="x")
+        out = TimeBasedSplitProcessor(policy=_Spy()).process([sub], cfg)
+        assert calls == []
+        assert out == [Subtitle(index=1, start_ms=0, end_ms=12000, text="x")]
+
+    def test_policy_receives_search_radius_from_config(self, cfg):
+        """Processor MUST pass ``config.japanese_split_search_radius`` as radius."""
+
+        captured: list[int] = []
+
+        class _Capture:
+            def adjust(
+                self, text: str, candidate_index: int, search_radius: int
+            ) -> int:
+                captured.append(search_radius)
+                return candidate_index
+
+        custom_cfg = PostProcessingConfig(
+            max_line_length=40,
+            max_lines_per_subtitle=2,
+            merge_gap_threshold_ms=200,
+            merge_max_duration_ms=6000,
+            split_max_duration_ms=6000,
+            japanese_split_search_radius=9,
+        )
+        sub = Subtitle(index=1, start_ms=0, end_ms=12000, text="the quick brown fox")
+        TimeBasedSplitProcessor(policy=_Capture()).process([sub], custom_cfg)
+        assert captured
+        assert all(r == 9 for r in captured)

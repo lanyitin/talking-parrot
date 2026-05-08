@@ -106,6 +106,17 @@ class PostProcessingConfig(BaseModel):
             ``japanese_filler_enabled`` is true.
         japanese_onomatopoeia_whitelist: Onomatopoeia tokens that are exempt
             from the Japanese repetition collapsing rule.
+        japanese_split_search_radius: Half-width (in characters) of the
+            window the Japanese split-boundary policy searches around the
+            linearly-interpolated candidate index. Must be in ``[0, 20]``.
+        japanese_split_no_split_units: Configured multi-character units
+            (typically Japanese auxiliaries) that the policy refuses to cut
+            through.
+        japanese_split_no_leading_particles: Particles that may not appear
+            as the first character of a post-split cue (would orphan them).
+        japanese_split_no_leading_finals: Sentence-final / inflection
+            characters that may not appear as the first character of a
+            post-split cue when preceded by hiragana / kanji.
     """
 
     model_config = {"extra": "forbid"}
@@ -123,16 +134,10 @@ class PostProcessingConfig(BaseModel):
     japanese_repetition_enabled: bool = True
     japanese_filler_words: list[str] = Field(
         default_factory=lambda: [
-            "あの",
             "あのー",
-            "えっと",
             "えーと",
             "えー",
-            "まあ",
             "そのー",
-            "その",
-            "なんか",
-            "ね",
         ]
     )
     japanese_onomatopoeia_whitelist: list[str] = Field(
@@ -143,6 +148,74 @@ class PostProcessingConfig(BaseModel):
             "ぴかぴか",
         ]
     )
+    japanese_split_search_radius: int = 4
+    japanese_split_no_split_units: list[str] = Field(
+        default_factory=lambda: [
+            "ます",
+            "ません",
+            "まし",
+            "です",
+            "でし",
+            "だっ",
+            "った",
+            "ない",
+            "なかっ",
+            "たい",
+            "よう",
+            "そう",
+            "という",
+            "について",
+        ]
+    )
+    japanese_split_no_leading_particles: list[str] = Field(
+        default_factory=lambda: [
+            "て",
+            "で",
+            "に",
+            "を",
+            "が",
+            "は",
+            "も",
+            "と",
+            "から",
+            "まで",
+            "より",
+            "へ",
+            "や",
+            "か",
+            "の",
+            "ね",
+            "よ",
+        ]
+    )
+    japanese_split_no_leading_finals: list[str] = Field(
+        default_factory=lambda: ["た", "だ", "る", "い"]
+    )
+
+    @field_validator("japanese_split_search_radius")
+    @classmethod
+    def _japanese_split_search_radius_in_range(cls, v: int) -> int:
+        """Validate that ``japanese_split_search_radius`` lies in ``[0, 20]``."""
+        if not (0 <= v <= 20):
+            raise ValueError(
+                f"japanese_split_search_radius ({v}) must be in the closed "
+                "interval [0, 20]"
+            )
+        return v
+
+    @field_validator(
+        "japanese_split_no_split_units",
+        "japanese_split_no_leading_particles",
+        "japanese_split_no_leading_finals",
+    )
+    @classmethod
+    def _japanese_split_lists_no_empty_entries(cls, v: list[str]) -> list[str]:
+        """Reject empty-string entries in any Japanese split list."""
+        if any(not entry for entry in v):
+            raise ValueError(
+                "japanese_split_* lists must not contain empty-string entries"
+            )
+        return v
 
     @field_validator("dedup_similarity_threshold")
     @classmethod
