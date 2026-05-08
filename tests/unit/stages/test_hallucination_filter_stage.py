@@ -383,6 +383,49 @@ def test_debug_per_drop_log_includes_chunk_index_and_rule(
     )
 
 
+def test_debug_per_drop_log_includes_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Per-drop DEBUG log MUST include the dropped result's text (change
+    ``investigate-japanese-demonstrative-drop`` task 1.2)."""
+    bracket = _result("[音楽]", chunk_index=7)
+    stage = HallucinationFilterStage(HallucinationFilterConfig())
+    ctx = _make_ctx([bracket])
+
+    with caplog.at_level(logging.DEBUG, logger="talking_parrot.stages"):
+        stage.process(ctx)
+
+    debug_msgs = [
+        _strip_ansi(r.getMessage())
+        for r in caplog.records
+        if r.levelno == logging.DEBUG
+    ]
+    assert any("text=" in m and "[音楽]" in m for m in debug_msgs), debug_msgs
+
+
+def test_debug_per_drop_log_truncates_long_text(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Per-drop DEBUG log MUST cap the logged text at 200 characters."""
+    long_text = "あ" * 300
+    # Force a drop via the repeat rule (5+ identical adjacent chars).
+    stage = HallucinationFilterStage(HallucinationFilterConfig())
+    ctx = _make_ctx([_result(long_text, chunk_index=42)])
+
+    with caplog.at_level(logging.DEBUG, logger="talking_parrot.stages"):
+        stage.process(ctx)
+
+    debug_msgs = [
+        _strip_ansi(r.getMessage())
+        for r in caplog.records
+        if r.levelno == logging.DEBUG
+    ]
+    # The full 300-char run MUST NOT appear in any debug message.
+    assert not any("あ" * 300 in m for m in debug_msgs), debug_msgs
+    # A 200-char prefix MUST appear in some debug message.
+    assert any("あ" * 200 in m for m in debug_msgs), debug_msgs
+
+
 def test_disabled_stage_does_not_emit_summary_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

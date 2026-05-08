@@ -82,6 +82,7 @@ class HallucinationFilterStage(PipelineStage):
                 "HallucinationFilterStage: dropping result",
                 chunk_index=result.chunk_index,
                 rule=rule,
+                text=result.text[:200],
             )
 
         after = len(kept)

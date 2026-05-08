@@ -853,8 +853,10 @@ tests:
 - `dedup_max_gap_ms: int = 600`
 - `japanese_filler_enabled: bool = True`
 - `japanese_repetition_enabled: bool = True`
-- `japanese_filler_words: list[str] = ["あの", "あのー", "えっと", "えーと", "えー", "まあ", "そのー", "その", "なんか", "ね"]`
+- `japanese_filler_words: list[str] = ["あのー", "えーと", "えー", "そのー"]`
 - `japanese_onomatopoeia_whitelist: list[str] = ["どきどき", "わくわく", "きらきら", "ぴかぴか"]`
+
+The default `japanese_filler_words` list MUST include only prolonged-vowel filler forms (those ending in the chōonpu `ー`). Bare-form fillers such as `その`, `あの`, `えっと`, `まあ`, `なんか`, `ね` MUST NOT appear in the default list because they collide with content words (most prominently the demonstrative pronoun `その`, observed in `test-samples/sample1`). Operators who need bare-form filler stripping for a specific corpus MAY add entries via the YAML `post_processing.japanese_filler_words` override.
 
 `dedup_similarity_threshold` MUST be in the closed interval `[0.0, 1.0]`. `dedup_max_gap_ms` MUST be `>= 0`. Validation SHALL be enforced via pydantic field validators; out-of-range values MUST raise `pydantic.ValidationError`.
 
@@ -863,6 +865,13 @@ tests:
 - **GIVEN** YAML containing `post_processing: {}`
 - **WHEN** `ConfigLoader.load()` parses it
 - **THEN** the resulting `PostProcessingConfig` MUST have `dedup_enabled=True`, `dedup_similarity_threshold=0.9`, `dedup_max_gap_ms=600`, `japanese_filler_enabled=True`, `japanese_repetition_enabled=True`
+
+#### Scenario: Default japanese_filler_words excludes bare demonstrative
+
+- **GIVEN** YAML containing `post_processing: {}`
+- **WHEN** `ConfigLoader.load()` parses it
+- **THEN** `PostProcessingConfig.japanese_filler_words` MUST NOT contain the bare string `"その"`
+- **AND** it MUST contain the prolonged form `"そのー"`
 
 #### Scenario: Out-of-range threshold rejected
 
@@ -903,4 +912,83 @@ tests:
   - tests/unit/post_processing/test_factory.py
   - tests/unit/stages/test_hallucination_filter_stage.py
   - tests/unit/post_processing/test_dedup.py
+-->
+
+---
+### Requirement: PostProcessingConfig Japanese split-boundary fields
+
+`PostProcessingConfig` SHALL expose the following additional fields with defaults that drive `JapaneseSplitBoundaryPolicy`:
+
+- `japanese_split_search_radius: int = 4`
+- `japanese_split_no_split_units: list[str] = ["ます", "ません", "まし", "です", "でし", "だっ", "った", "ない", "なかっ", "たい", "よう", "そう", "という", "について"]`
+- `japanese_split_no_leading_particles: list[str] = ["て", "で", "に", "を", "が", "は", "も", "と", "から", "まで", "より", "へ", "や", "か", "の", "ね", "よ"]`
+- `japanese_split_no_leading_finals: list[str] = ["た", "だ", "る", "い"]`
+
+`japanese_split_search_radius` MUST be in the closed interval `[0, 20]`. Validation SHALL be enforced via a pydantic field validator; out-of-range values MUST raise `pydantic.ValidationError`. Each list field MUST contain only non-empty strings; empty-string entries MUST raise `pydantic.ValidationError`.
+
+#### Scenario: Default fields populated
+
+- **GIVEN** YAML containing `post_processing: {}`
+- **WHEN** `ConfigLoader.load()` parses it
+- **THEN** the resulting `PostProcessingConfig` MUST have `japanese_split_search_radius == 4`
+- **AND** `japanese_split_no_split_units` MUST contain `"まし"`, `"です"`, and `"よう"`
+- **AND** `japanese_split_no_leading_particles` MUST contain `"に"`, `"を"`, and `"の"`
+- **AND** `japanese_split_no_leading_finals` MUST contain `"た"` and `"い"`
+
+#### Scenario: Out-of-range radius rejected
+
+- **GIVEN** YAML with `post_processing.japanese_split_search_radius: 25`
+- **WHEN** `ConfigLoader.load()` parses it
+- **THEN** `pydantic.ValidationError` MUST be raised
+
+#### Scenario: Empty string in list rejected
+
+- **GIVEN** YAML with `post_processing.japanese_split_no_leading_particles: ["", "に"]`
+- **WHEN** `ConfigLoader.load()` parses it
+- **THEN** `pydantic.ValidationError` MUST be raised
+
+#### Scenario: Negative radius rejected
+
+- **GIVEN** YAML with `post_processing.japanese_split_search_radius: -1`
+- **WHEN** `ConfigLoader.load()` parses it
+- **THEN** `pydantic.ValidationError` MUST be raised
+
+<!-- @trace
+source: japanese-aware-cue-split
+updated: 2026-05-08
+code:
+  - CLAUDE.md
+  - src/talking_parrot/post_processing/split_policy.py
+  - src/talking_parrot/post_processing/character_boundary.py
+  - src/talking_parrot/transcription/mlx_whisper_backend.py
+  - src/talking_parrot/config/models.py
+  - src/talking_parrot/post_processing/japanese.py
+  - src/talking_parrot/stages/alignment_stage.py
+  - src/talking_parrot/post_processing/time_based.py
+  - src/talking_parrot/transcription/backend.py
+  - src/talking_parrot/post_processing/dedup.py
+  - src/talking_parrot/transcription/faster_whisper_backend.py
+  - src/talking_parrot/cli.py
+  - src/talking_parrot/stages/transcription_stage.py
+  - docs/TODOs.md
+  - src/talking_parrot/post_processing/factory.py
+  - src/talking_parrot/logging_config.py
+  - src/talking_parrot/stages/hallucination_filter_stage.py
+tests:
+  - tests/unit/cli/test_cli_wiring.py
+  - tests/unit/stages/test_alignment_stage.py
+  - tests/unit/stages/test_hallucination_filter_stage.py
+  - tests/unit/config/test_loader.py
+  - tests/unit/transcription/test_mlx_whisper_backend.py
+  - tests/unit/config/test_models.py
+  - tests/unit/post_processing/test_character_boundary.py
+  - tests/unit/post_processing/test_time_based.py
+  - tests/unit/post_processing/test_factory.py
+  - tests/unit/stages/test_transcription_stage.py
+  - tests/integration/test_pipeline_smoke.py
+  - tests/unit/post_processing/test_dedup.py
+  - tests/unit/transcription/test_backend.py
+  - tests/unit/post_processing/test_split_policy.py
+  - tests/unit/transcription/test_faster_whisper_backend.py
+  - tests/unit/post_processing/test_japanese.py
 -->
