@@ -132,6 +132,12 @@ When `create(AlignmentGranularity.CHARACTER, ctx)` is called, the factory SHALL 
 4. `JapaneseFillerProcessor` (present only when `ctx.config.expected_language == "ja"`).
 5. `JapaneseRepetitionProcessor` (present only when `ctx.config.expected_language == "ja"`).
 
+The `CharacterBoundarySplitProcessor` instance SHALL be constructed with:
+
+- `policy` keyword: the result of `_build_policy(ctx)` (unchanged).
+- `time_policy` keyword: the result of `_build_time_policy(ctx)` (unchanged).
+- `token_map_by_index` keyword: the result of `_build_token_map(ctx.transcription_results)` (same helper already used for the WORD path).
+
 #### Scenario: CHARACTER with Japanese returns full pipeline
 
 - **GIVEN** `ctx.config.expected_language == "ja"`
@@ -149,40 +155,27 @@ When `create(AlignmentGranularity.CHARACTER, ctx)` is called, the factory SHALL 
 - **WHEN** `factory.create(AlignmentGranularity.CHARACTER, ctx)` is called
 - **THEN** the result length MUST equal 3 with no `JapaneseFillerProcessor` or `JapaneseRepetitionProcessor` instance present
 
+#### Scenario: CHARACTER path injects token map into CharacterBoundarySplitProcessor
+
+- **GIVEN** `ctx.transcription_results` of length 2 with non-empty `aligned_tokens`
+- **WHEN** `factory.create(AlignmentGranularity.CHARACTER, ctx)` is called
+- **THEN** the `CharacterBoundarySplitProcessor` instance at `result[2]` MUST have `token_map_by_index` with keys `{1, 2}`
+
 
 <!-- @trace
-source: segment-level-postprocessing-pipeline
+source: vad-driven-cue-split
 updated: 2026-05-08
 code:
+  - uv.lock
+  - docs/TODOs.md
   - src/talking_parrot/post_processing/factory.py
-  - sample1.srt
-  - src/talking_parrot/stages/transcription_stage.py
-  - src/talking_parrot/stages/hallucination_filter_stage.py
-  - src/talking_parrot/transcription/mlx_whisper_backend.py
-  - src/talking_parrot/transcription/faster_whisper_backend.py
-  - src/talking_parrot/transcription/backend.py
-  - src/talking_parrot/cli.py
-  - src/talking_parrot/post_processing/japanese.py
-  - sample1.json
-  - src/talking_parrot/config/models.py
-  - src/talking_parrot/logging_config.py
-  - CLAUDE.md
-  - src/talking_parrot/stages/alignment_stage.py
-  - src/talking_parrot/post_processing/dedup.py
+  - src/talking_parrot/post_processing/split_time_policy.py
+  - src/talking_parrot/post_processing/character_boundary.py
+  - pyproject.toml
 tests:
-  - tests/unit/stages/test_transcription_stage.py
-  - tests/unit/stages/test_alignment_stage.py
-  - tests/unit/transcription/test_backend.py
-  - tests/unit/transcription/test_mlx_whisper_backend.py
-  - tests/unit/transcription/test_faster_whisper_backend.py
-  - tests/unit/cli/test_cli_wiring.py
-  - tests/unit/config/test_loader.py
-  - tests/integration/test_pipeline_smoke.py
-  - tests/unit/post_processing/test_japanese.py
-  - tests/unit/config/test_models.py
+  - tests/unit/post_processing/test_character_boundary.py
   - tests/unit/post_processing/test_factory.py
-  - tests/unit/stages/test_hallucination_filter_stage.py
-  - tests/unit/post_processing/test_dedup.py
+  - tests/unit/post_processing/test_split_time_policy.py
 -->
 
 ---

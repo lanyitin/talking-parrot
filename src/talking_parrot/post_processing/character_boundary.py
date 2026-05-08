@@ -1,12 +1,15 @@
 """Character-boundary post-processors (CJK and similar).
 
-Spec: ``character-boundary-processors``. Design: D4 (no token map) and D6.
+Spec: ``character-boundary-processors``. Design: ``vad-driven-cue-split``
+Decisions 1, 3, 4 — split decision is time-first when a VAD silence is
+found inside the cue, with grammar fallback otherwise.
 """
 
 from __future__ import annotations
 
-import structlog
+import bisect
 import math
+import structlog
 from typing import TYPE_CHECKING
 
 from talking_parrot.models.subtitle import Subtitle
@@ -22,6 +25,7 @@ from talking_parrot.post_processing.split_time_policy import (
 
 if TYPE_CHECKING:
     from talking_parrot.config.models import PostProcessingConfig
+    from talking_parrot.models.transcription import AlignedToken
 
 logger = structlog.get_logger(__name__)
 
@@ -66,16 +70,36 @@ class CharacterBoundaryMergeProcessor(SubtitleProcessor):
 
 
 class CharacterBoundarySplitProcessor(SubtitleProcessor):
-    """Split oversized cues using linear interpolation on character indices."""
+    """Split oversized cues using a VAD-driven (time → text) primary path.
+
+    Spec ``character-boundary-processors`` (change ``vad-driven-cue-split``).
+
+    For each inner boundary the processor first asks
+    :meth:`SplitTimePolicy.pick` for a silence midpoint inside the cue. If a
+    midpoint is returned AND aligned tokens are available for the cue, the
+    text-cut character index is derived by binary-searching the tokens by
+    ``start_ms`` and clamped into ``[1, len(text) - 1]``. Otherwise the
+    processor falls back to the historical grammar-snap algorithm using
+    :meth:`SplitBoundaryPolicy.adjust` and :meth:`SplitTimePolicy.adjust`.
+    """
 
     def __init__(
         self,
         policy: SplitBoundaryPolicy | None = None,
         time_policy: SplitTimePolicy | None = None,
+        token_map_by_index: dict[int, list["AlignedToken"]] | None = None,
     ) -> None:
-        """Capture the split-boundary and split-time policies (default: linear)."""
+        """Capture the split policies and (optional) per-cue token map.
+
+        ``token_map_by_index`` maps the seed cue's ``index`` (1-based) to a
+        list of :class:`AlignedToken`. ``None`` is normalised to ``{}`` so
+        absent entries fall through to the grammar-based fallback.
+        """
         self._policy: SplitBoundaryPolicy = policy or LinearSplitBoundaryPolicy()
         self._time_policy: SplitTimePolicy = time_policy or LinearSplitTimePolicy()
+        self._token_map_by_index: dict[int, list["AlignedToken"]] = (
+            token_map_by_index if token_map_by_index is not None else {}
+        )
 
     def process(
         self, subtitles: list[Subtitle], config: "PostProcessingConfig"
@@ -102,11 +126,41 @@ class CharacterBoundarySplitProcessor(SubtitleProcessor):
             n = math.ceil(duration / config.split_max_duration_ms)
             text_len = len(sub.text)
             radius = config.japanese_split_search_radius
+            tokens = self._token_map_by_index.get(sub.index, [])
+            token_ends = [t.end_ms for t in tokens]
 
-            time_boundaries: list[int] = [sub.start_ms]
+            # Compute (time_boundary, char_end_or_None) per inner boundary.
+            # ``char_end_or_None is None`` signals "use grammar fallback".
+            inner: list[tuple[int, int | None]] = []
             for i in range(1, n):
-                linear_ms = sub.start_ms + (i * duration) // n
-                snapped = self._time_policy.adjust(linear_ms, sub.start_ms, sub.end_ms)
+                silence_midpoint = self._time_policy.pick(sub.start_ms, sub.end_ms)
+                if silence_midpoint is not None and tokens:
+                    # Primary VAD-driven path: derive char_idx from token timestamps.
+                    # Find the first token whose end_ms >= silence_midpoint, i.e.
+                    # the token containing the silence or the first token after it.
+                    found_idx = bisect.bisect_left(token_ends, silence_midpoint)
+                    char_idx = sum(len(t.word) for t in tokens[:found_idx])
+                    char_idx = max(1, min(char_idx, text_len - 1))
+                    inner.append((silence_midpoint, char_idx))
+                else:
+                    if silence_midpoint is None:
+                        logger.debug(
+                            "CharacterBoundarySplitProcessor: fallback no_silence",
+                            cue_index=sub.index,
+                            slice_index=i,
+                        )
+                    else:
+                        logger.debug(
+                            "CharacterBoundarySplitProcessor: fallback empty_token_map",
+                            cue_index=sub.index,
+                            slice_index=i,
+                        )
+                    inner.append((self._fallback_time(sub, duration, n, i), None))
+
+            # Build full time-boundary list with 1ms-collision guard.
+            time_boundaries: list[int] = [sub.start_ms]
+            for i, (t_ms, _) in enumerate(inner, start=1):
+                snapped = t_ms
                 if snapped <= time_boundaries[-1]:
                     logger.debug(
                         "CharacterBoundarySplitProcessor: time-boundary collision",
@@ -132,12 +186,16 @@ class CharacterBoundarySplitProcessor(SubtitleProcessor):
                 if i == n - 1:
                     char_end = text_len
                 else:
-                    candidate = round(
-                        ((sub.start_ms + ((i + 1) * duration) // n) - sub.start_ms)
-                        / duration
-                        * text_len
-                    )
-                    char_end = self._policy.adjust(sub.text, candidate, radius)
+                    primary_char_end = inner[i][1]
+                    if primary_char_end is not None:
+                        char_end = primary_char_end
+                    else:
+                        candidate = round(
+                            ((sub.start_ms + ((i + 1) * duration) // n) - sub.start_ms)
+                            / duration
+                            * text_len
+                        )
+                        char_end = self._policy.adjust(sub.text, candidate, radius)
                 if char_end == prev_char:
                     logger.debug(
                         "CharacterBoundarySplitProcessor: empty slice from policy snap",
@@ -157,3 +215,8 @@ class CharacterBoundarySplitProcessor(SubtitleProcessor):
                     )
                 )
         return _renumber(out)
+
+    def _fallback_time(self, sub: Subtitle, duration: int, n: int, i: int) -> int:
+        """Return ``time_policy.adjust`` of the linear slice-end timestamp."""
+        linear_ms = sub.start_ms + (i * duration) // n
+        return self._time_policy.adjust(linear_ms, sub.start_ms, sub.end_ms)

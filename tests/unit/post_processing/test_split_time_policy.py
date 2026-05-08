@@ -106,3 +106,74 @@ class TestVadAlignedSplitTimePolicy:
         silences.append((0, 100))
         # The appended (0, 100) silence's midpoint 50 SHALL NOT be considered.
         assert policy.adjust(candidate_ms=50, cue_start_ms=0, cue_end_ms=9000) == 50
+
+
+class TestLinearSplitTimePolicyPick:
+    """Spec: ``LinearSplitTimePolicy.pick`` always returns ``None``."""
+
+    def test_pick_returns_none(self):
+        """``LinearSplitTimePolicy.pick`` MUST return ``None`` unconditionally."""
+        policy = LinearSplitTimePolicy()
+        assert policy.pick(0, 9000) is None
+
+    def test_pick_returns_none_regardless_of_cue_bounds(self):
+        """Different cue bounds MUST still yield ``None``."""
+        policy = LinearSplitTimePolicy()
+        assert policy.pick(1000, 7000) is None
+        assert policy.pick(0, 1) is None
+
+
+class TestVadAlignedSplitTimePolicyPick:
+    """Spec: ``VadAlignedSplitTimePolicy.pick`` returns best silence midpoint inside cue."""
+
+    def test_pick_returns_midpoint_of_silence_inside_cue(self):
+        """Spec scenario: silences=[(4400,4700)], cue (0, 9000) → 4550."""
+        policy = VadAlignedSplitTimePolicy(
+            silences=[(4400, 4700)], search_radius_ms=300
+        )
+        assert policy.pick(cue_start_ms=0, cue_end_ms=9000) == 4550
+
+    def test_pick_returns_none_when_no_silence_inside_cue(self):
+        """Spec scenario: silences with midpoints outside cue window → None."""
+        policy = VadAlignedSplitTimePolicy(
+            silences=[(100, 200), (8900, 9100)], search_radius_ms=500
+        )
+        # Midpoints are 150 and 9000; cue is (500, 8500).
+        assert policy.pick(cue_start_ms=500, cue_end_ms=8500) is None
+
+    def test_pick_returns_none_for_empty_silence_list(self):
+        """Spec scenario: empty silences → None."""
+        policy = VadAlignedSplitTimePolicy(silences=[], search_radius_ms=300)
+        assert policy.pick(cue_start_ms=0, cue_end_ms=9000) is None
+
+    def test_pick_tie_breaks_to_smaller_midpoint(self):
+        """Spec scenario: equidistant midpoints → smaller wins."""
+        policy = VadAlignedSplitTimePolicy(
+            silences=[(3800, 4200), (5800, 6200)], search_radius_ms=1000
+        )
+        # center_ms=5000; mid1=4000 (1000 away); mid2=6000 (1000 away). Tie → 4000.
+        assert policy.pick(cue_start_ms=0, cue_end_ms=10000) == 4000
+
+    def test_pick_picks_nearest_to_center(self):
+        """Two silences in cue: the one nearer to center wins."""
+        policy = VadAlignedSplitTimePolicy(
+            silences=[(3000, 3200), (4900, 5100)], search_radius_ms=10_000
+        )
+        # center=5000; mid1=3100 (1900 away); mid2=5000 (0 away). 5000 wins.
+        assert policy.pick(cue_start_ms=0, cue_end_ms=10000) == 5000
+
+    def test_pick_open_interval_excludes_cue_start(self):
+        """Silence midpoint equal to cue_start_ms MUST be rejected."""
+        policy = VadAlignedSplitTimePolicy(
+            silences=[(-100, 100)], search_radius_ms=10_000
+        )
+        # mid=0 == cue_start → rejected.
+        assert policy.pick(cue_start_ms=0, cue_end_ms=9000) is None
+
+    def test_pick_open_interval_excludes_cue_end(self):
+        """Silence midpoint equal to cue_end_ms MUST be rejected."""
+        policy = VadAlignedSplitTimePolicy(
+            silences=[(8900, 9100)], search_radius_ms=10_000
+        )
+        # mid=9000 == cue_end → rejected.
+        assert policy.pick(cue_start_ms=0, cue_end_ms=9000) is None

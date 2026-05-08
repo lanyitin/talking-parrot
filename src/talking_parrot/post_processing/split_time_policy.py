@@ -20,10 +20,14 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class SplitTimePolicy(Protocol):
-    """Structural type for objects that adjust a cue split timestamp."""
+    """Structural type for objects that adjust or pick a cue split timestamp."""
 
     def adjust(self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int) -> int:
         """Return the timestamp at which to slice the cue."""
+        ...
+
+    def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+        """Return the best silence midpoint strictly inside the cue, or ``None``."""
         ...
 
 
@@ -33,6 +37,10 @@ class LinearSplitTimePolicy:
     def adjust(self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int) -> int:
         """Return ``candidate_ms`` verbatim, ignoring the cue bounds."""
         return candidate_ms
+
+    def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+        """Always return ``None`` — no silence-driven cut available."""
+        return None
 
 
 class VadAlignedSplitTimePolicy:
@@ -82,3 +90,28 @@ class VadAlignedSplitTimePolicy:
                 best_mid = mid
                 best_dist = dist
         return candidate_ms if best_mid is None else best_mid
+
+    def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+        """Return the silence midpoint nearest the cue's linear center, or ``None``.
+
+        Selects from configured silences whose midpoint ``mid`` satisfies
+        ``cue_start_ms < mid < cue_end_ms``. Ties on ``abs(mid - center_ms)``
+        are broken by selecting the smaller ``mid``. Returns ``None`` when
+        no qualifying silence exists.
+        """
+        center_ms = (cue_start_ms + cue_end_ms) // 2
+        best_mid: int | None = None
+        best_dist = -1
+        for s_start, s_end in self._silences:
+            mid = (s_start + s_end) // 2
+            if not (cue_start_ms < mid < cue_end_ms):
+                continue
+            dist = abs(mid - center_ms)
+            if (
+                best_mid is None
+                or dist < best_dist
+                or (dist == best_dist and mid < best_mid)
+            ):
+                best_mid = mid
+                best_dist = dist
+        return best_mid

@@ -446,3 +446,82 @@ class TestFactorySplitTimePolicyInjection:
         split = next(p for p in out if isinstance(p, CharacterBoundarySplitProcessor))
         assert isinstance(split._policy, JapaneseSplitBoundaryPolicy)
         assert isinstance(split._time_policy, VadAlignedSplitTimePolicy)
+
+
+class TestFactoryCharacterTokenMapInjection:
+    """Spec ``granularity-aware-processor-factory``: CHARACTER injects token_map_by_index.
+
+    Decision 1: factory threads ``_build_token_map`` result into
+    ``CharacterBoundarySplitProcessor`` (mirroring the WORD-path pattern).
+    """
+
+    def test_character_path_injects_token_map_into_split_processor(self):
+        """Two transcription results → CharacterBoundarySplitProcessor.token_map keys = {1, 2}."""
+        factory = DefaultGranularityAwareProcessorFactory()
+        results = [
+            _tr(0, 0, 1000, "a", aligned_tokens=[_tok("a", 0, 1000)]),
+            _tr(1, 1000, 2000, "b", aligned_tokens=[_tok("b", 1000, 2000)]),
+        ]
+        out = factory.create(AlignmentGranularity.CHARACTER, _ctx(results))
+        split = next(p for p in out if isinstance(p, CharacterBoundarySplitProcessor))
+        assert hasattr(split, "_token_map_by_index")
+        assert set(split._token_map_by_index.keys()) == {1, 2}
+
+    def test_character_missing_aligned_tokens_map_to_empty_list(self):
+        """``aligned_tokens=None`` → ``[]`` in token_map (mirrors WORD-path semantics)."""
+        factory = DefaultGranularityAwareProcessorFactory()
+        results = [
+            _tr(0, 0, 1000, "a", aligned_tokens=None),
+        ]
+        out = factory.create(AlignmentGranularity.CHARACTER, _ctx(results))
+        split = next(p for p in out if isinstance(p, CharacterBoundarySplitProcessor))
+        assert split._token_map_by_index == {1: []}
+
+    def test_character_e2e_full_pipeline_uses_vad_aligned_and_token_map(self):
+        """End-to-end (Decision 6): VAD context + radius>0 + tokens → both injected.
+
+        The CHARACTER-path split processor MUST receive both a
+        ``VadAlignedSplitTimePolicy`` and a populated ``token_map_by_index``
+        when the pipeline context provides VAD segments and aligned tokens.
+        """
+        from talking_parrot.config.models import (
+            PipelineConfig,
+            PostProcessingConfig,
+            TranscribingStep,
+        )
+        from talking_parrot.post_processing.split_time_policy import (
+            VadAlignedSplitTimePolicy,
+        )
+
+        config = PipelineConfig(
+            expected_language="ja",
+            transcribing=[TranscribingStep(condition="true", backend="whisper")],
+            post_processing=PostProcessingConfig(split_time_snap_radius_ms=300),
+        )
+        media_info = MediaInfo(path=Path("x"), duration_ms=10_000, sha256="0" * 64)
+        results = [
+            _tr(
+                0,
+                0,
+                9000,
+                "あいうえおかきくけこ",
+                aligned_tokens=[
+                    _tok("あいうえお", 0, 4000),
+                    _tok("かきくけこ", 4000, 9000),
+                ],
+            ),
+        ]
+        ctx = PipelineContext(
+            config=config,
+            media_info=media_info,
+            transcription_results=results,
+            vad_segments=[_vad(0, 4000), _vad(4400, 9000)],
+        )
+        factory = DefaultGranularityAwareProcessorFactory()
+        out = factory.create(AlignmentGranularity.CHARACTER, ctx)
+        split = next(p for p in out if isinstance(p, CharacterBoundarySplitProcessor))
+        assert isinstance(split._time_policy, VadAlignedSplitTimePolicy)
+        assert split._token_map_by_index.keys() == {1}
+        # Primary VAD-driven path: pick() must return the silence midpoint
+        # that lies inside (0, 9000), namely (4000+4400)//2 = 4200.
+        assert split._time_policy.pick(0, 9000) == 4200

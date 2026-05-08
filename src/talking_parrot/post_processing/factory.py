@@ -104,12 +104,17 @@ class DefaultGranularityAwareProcessorFactory(GranularityAwareProcessorFactory):
                 WordBoundarySplitProcessor(token_map_by_index=token_map),
             ]
         elif granularity is AlignmentGranularity.CHARACTER:
-            logger.debug("factory: CHARACTER path")
+            token_map = self._build_token_map(ctx.transcription_results)
+            logger.debug(
+                "factory: CHARACTER path",
+                token_map_keys=sorted(token_map.keys()),
+            )
             core = [
                 CharacterBoundaryMergeProcessor(),
                 CharacterBoundarySplitProcessor(
                     policy=self._build_policy(ctx),
                     time_policy=self._build_time_policy(ctx),
+                    token_map_by_index=token_map,
                 ),
             ]
         elif granularity is None:

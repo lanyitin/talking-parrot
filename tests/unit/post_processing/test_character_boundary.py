@@ -94,7 +94,11 @@ class TestCharacterBoundarySplit:
 
 
 class TestCharacterBoundaryConstructorSurface:
-    """D4: character-boundary processors don't accept a token map."""
+    """Spec ``character-boundary-processors``: split processor accepts token_map_by_index.
+
+    The merge processor still does not accept a token map (merge is purely
+    time/length-based per the design Risks section).
+    """
 
     def test_merge_constructor_takes_no_token_map(self):
         """``CharacterBoundaryMergeProcessor.__init__`` accepts only ``self``."""
@@ -102,11 +106,11 @@ class TestCharacterBoundaryConstructorSurface:
         params = [p for p in sig.parameters if p != "self"]
         assert "token_map_by_index" not in params
 
-    def test_split_constructor_takes_no_token_map(self):
-        """``CharacterBoundarySplitProcessor.__init__`` accepts only ``self``."""
+    def test_split_constructor_accepts_token_map_by_index(self):
+        """``CharacterBoundarySplitProcessor.__init__`` MUST accept ``token_map_by_index``."""
         sig = inspect.signature(CharacterBoundarySplitProcessor.__init__)
         params = [p for p in sig.parameters if p != "self"]
-        assert "token_map_by_index" not in params
+        assert "token_map_by_index" in params
 
 
 class TestCharacterBoundarySplitWithPolicy:
@@ -246,6 +250,9 @@ class TestCharacterBoundarySplitWithTimePolicy:
             ) -> int:
                 return 4700
 
+            def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+                return None
+
         sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
         out = CharacterBoundarySplitProcessor(time_policy=_SnapTo4700()).process(
             [sub], cfg
@@ -280,6 +287,9 @@ class TestCharacterBoundarySplitWithTimePolicy:
             ) -> int:
                 return 8000
 
+            def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+                return None
+
         custom_cfg = PostProcessingConfig(
             max_line_length=20,
             max_lines_per_subtitle=2,
@@ -301,4 +311,187 @@ class TestCharacterBoundarySplitWithTimePolicy:
         assert (out[2].start_ms, out[2].end_ms) == (8001, 12000)
         assert any(
             r.levelno == logging.DEBUG and "1" in r.getMessage() for r in caplog.records
+        )
+
+
+class TestCharacterBoundarySplitVadDriven:
+    """Spec ``character-boundary-processors``: VAD-driven primary path.
+
+    Decision 3: time policy ``pick`` returns a silence midpoint, then a
+    binary search over ``token_map_by_index`` derives the text cut index.
+    """
+
+    def test_vad_driven_path_selects_silence_midpoint_and_token_index(self, cfg):
+        """Spec scenario: silence midpoint 4200, two tokens → cut at second token."""
+        from talking_parrot.models.transcription import AlignedToken
+
+        class _PickAt4200:
+            def adjust(
+                self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int
+            ) -> int:
+                return candidate_ms
+
+            def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+                return 4200
+
+        tokens = [
+            AlignedToken(word="あいうえお", start_ms=0, end_ms=4000, score=1.0),
+            AlignedToken(word="かきくけこ", start_ms=4000, end_ms=9000, score=1.0),
+        ]
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        out = CharacterBoundarySplitProcessor(
+            token_map_by_index={1: tokens},
+            time_policy=_PickAt4200(),
+        ).process([sub], cfg)
+        assert len(out) == 2
+        assert out[0].text == "あいうえお"
+        assert out[1].text == "かきくけこ"
+        assert (out[0].start_ms, out[0].end_ms) == (0, 4200)
+        assert (out[1].start_ms, out[1].end_ms) == (4200, 9000)
+
+    def test_vad_driven_path_clamps_char_idx_to_avoid_empty_first_slice(self, cfg):
+        """If silence is before any token's start_ms, char_idx clamps to 1."""
+        from talking_parrot.models.transcription import AlignedToken
+
+        class _PickAt100:
+            def adjust(
+                self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int
+            ) -> int:
+                return candidate_ms
+
+            def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+                return 100
+
+        # All tokens start after 100; binary search → found_idx=0 → cumulative
+        # char count is 0; clamp to [1, len-1] = 1.
+        tokens = [
+            AlignedToken(word="あいうえお", start_ms=500, end_ms=4000, score=1.0),
+            AlignedToken(word="かきくけこ", start_ms=4000, end_ms=9000, score=1.0),
+        ]
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        out = CharacterBoundarySplitProcessor(
+            token_map_by_index={1: tokens},
+            time_policy=_PickAt100(),
+        ).process([sub], cfg)
+        assert len(out) == 2
+        # char_idx clamped to 1 → first slice has 1 char.
+        assert out[0].text == "あ"
+        assert out[1].text == "いうえおかきくけこ"
+        assert (out[0].start_ms, out[0].end_ms) == (0, 100)
+        assert (out[1].start_ms, out[1].end_ms) == (100, 9000)
+
+    def test_vad_driven_path_clamps_char_idx_to_len_minus_one(self, cfg):
+        """If silence is after all tokens' start_ms, char_idx clamps to len-1."""
+        from talking_parrot.models.transcription import AlignedToken
+
+        class _PickAt8000:
+            def adjust(
+                self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int
+            ) -> int:
+                return candidate_ms
+
+            def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+                return 8000
+
+        tokens = [
+            AlignedToken(word="あいうえお", start_ms=0, end_ms=2000, score=1.0),
+            AlignedToken(word="かきくけこ", start_ms=2000, end_ms=4000, score=1.0),
+        ]
+        # Both tokens start_ms < 8000 → binary search returns len(tokens)=2 →
+        # cumulative char count = 10 = full text len; clamp to len-1 = 9.
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        out = CharacterBoundarySplitProcessor(
+            token_map_by_index={1: tokens},
+            time_policy=_PickAt8000(),
+        ).process([sub], cfg)
+        assert len(out) == 2
+        assert out[0].text == "あいうえおかきくけ"
+        assert out[1].text == "こ"
+        assert (out[0].start_ms, out[0].end_ms) == (0, 8000)
+        assert (out[1].start_ms, out[1].end_ms) == (8000, 9000)
+
+
+class TestCharacterBoundarySplitVadFallback:
+    """Spec ``character-boundary-processors``: fallback when VAD path unavailable.
+
+    Decision 4: when ``pick()`` returns ``None`` OR token map is empty for
+    the cue, fall back to the grammar-based path (text → time).
+    """
+
+    def test_fallback_when_pick_returns_none_matches_linear(self, cfg, caplog):
+        """Spec scenario: pick=None → identical to linear policy result."""
+        from talking_parrot.models.transcription import AlignedToken
+        from talking_parrot.post_processing.split_time_policy import (
+            LinearSplitTimePolicy,
+        )
+
+        tokens = [
+            AlignedToken(word="あいうえお", start_ms=0, end_ms=4000, score=1.0),
+            AlignedToken(word="かきくけこ", start_ms=4000, end_ms=9000, score=1.0),
+        ]
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        # Linear time policy ⇒ pick() returns None.
+        with caplog.at_level(logging.DEBUG, logger="talking_parrot.post_processing"):
+            out = CharacterBoundarySplitProcessor(
+                token_map_by_index={1: tokens},
+                time_policy=LinearSplitTimePolicy(),
+            ).process([sub], cfg)
+        # Same shape as the existing linear-policy case.
+        baseline = CharacterBoundarySplitProcessor().process([sub], cfg)
+        assert out == baseline
+        assert any(
+            r.levelno == logging.DEBUG and "no_silence" in r.getMessage()
+            for r in caplog.records
+        )
+
+    def test_fallback_when_token_map_empty_for_cue(self, cfg, caplog):
+        """Spec scenario: empty tokens for cue → grammar fallback + DEBUG log."""
+
+        class _PickAt4500:
+            def adjust(
+                self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int
+            ) -> int:
+                return candidate_ms
+
+            def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+                return 4500
+
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        with caplog.at_level(logging.DEBUG, logger="talking_parrot.post_processing"):
+            out = CharacterBoundarySplitProcessor(
+                token_map_by_index={},
+                time_policy=_PickAt4500(),
+            ).process([sub], cfg)
+        # Grammar fallback path: text → time. Time policy pick is irrelevant
+        # for fallback; only adjust matters and stub passes through linear ms.
+        assert len(out) == 2
+        assert out[0].text + out[1].text == "あいうえおかきくけこ"
+        assert any(
+            r.levelno == logging.DEBUG and "empty_token_map" in r.getMessage()
+            for r in caplog.records
+        )
+
+    def test_none_token_map_treated_as_empty_dict(self, cfg, caplog):
+        """Spec scenario: ``token_map_by_index=None`` ≡ ``{}`` → fallback."""
+
+        class _PickAt4500:
+            def adjust(
+                self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int
+            ) -> int:
+                return candidate_ms
+
+            def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+                return 4500
+
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        with caplog.at_level(logging.DEBUG, logger="talking_parrot.post_processing"):
+            # Default constructor: no token_map_by_index passed at all.
+            out = CharacterBoundarySplitProcessor(time_policy=_PickAt4500()).process(
+                [sub], cfg
+            )
+        assert len(out) == 2
+        assert out[0].text + out[1].text == "あいうえおかきくけこ"
+        assert any(
+            r.levelno == logging.DEBUG and "empty_token_map" in r.getMessage()
+            for r in caplog.records
         )
