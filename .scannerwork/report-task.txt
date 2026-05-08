@@ -1,0 +1,6 @@
+projectKey=talking-parrot
+serverUrl=https://sonarqube.local.dev
+serverVersion=25.12.0.117093
+dashboardUrl=https://sonarqube.local.dev/dashboard?id=talking-parrot
+ceTaskId=dc70046e-a7b5-47f6-946d-6128c726b942
+ceTaskUrl=https://sonarqube.local.dev/api/ce/task?id=dc70046e-a7b5-47f6-946d-6128c726b942

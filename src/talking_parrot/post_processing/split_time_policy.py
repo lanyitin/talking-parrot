@@ -9,7 +9,7 @@ return the actual millisecond timestamp at which the cue should be sliced.
 
 The default implementation, :class:`LinearSplitTimePolicy`, is a no-op
 that returns the candidate unchanged — preserving the historical
-linear-interpolation behaviour for non-VAD pipelines.
+linear-interpolation behavior for non-VAD pipelines.
 """
 
 from __future__ import annotations

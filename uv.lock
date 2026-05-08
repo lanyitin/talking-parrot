@@ -1505,6 +1505,7 @@ ten = [
 [package.dev-dependencies]
 dev = [
     { name = "mypy" },
+    { name = "pytest-cov" },
     { name = "ruff" },
     { name = "types-pyyaml" },
     { name = "vulture" },
@@ -1536,6 +1537,7 @@ provides-extras = ["faster-whisper", "mlx", "ten", "silero", "align", "dev"]
 [package.metadata.requires-dev]
 dev = [
     { name = "mypy", specifier = ">=1.20.2" },
+    { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "ruff", specifier = ">=0.15.12" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260408" },
     { name = "vulture", specifier = ">=2.16" },

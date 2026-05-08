@@ -11,6 +11,13 @@ __pycache__/
 dist/
 docs/openspec/.vector-search.db*
 
+# Coverage
+.coverage
+coverage.xml
+
+# SonarQube
+.scannerwork/
+
 # Local sample outputs
 /sample*.json
 /sample*.srt
