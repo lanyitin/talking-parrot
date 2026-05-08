@@ -28,3 +28,4 @@ aliases:
 | [[ADR-0001-跨平台轉錄後端\|ADR-0001]] | 跨平台 Whisper 後端選擇策略（介面 + 工廠模式） |
 | [[ADR-0002-condition-評估器\|ADR-0002]] | Transcription Condition 評估器設計（安全 AST 白名單） |
 | [[ADR-0003-對齊粒度與後處理策略\|ADR-0003]] | 對齊粒度與後處理策略（AlignmentGranularity + 工廠模式） |
+| [[ADR-0004-VAD-driven切分文法sanity-check整合\|ADR-0004]] | VAD-driven 切分 × 文法 sanity check 整合方針（VAD 主訊號 + 文法 gate） |

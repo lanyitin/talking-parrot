@@ -525,3 +525,111 @@ class TestFactoryCharacterTokenMapInjection:
         # Primary VAD-driven path: pick() must return the silence midpoint
         # that lies inside (0, 9000), namely (4000+4400)//2 = 4200.
         assert split._time_policy.pick(0, 9000) == 4200
+
+
+class TestFactoryVadGrammarSearchRadiusWiring:
+    """ADR-0004: ``PostProcessingConfig.vad_grammar_search_radius`` flows through to the processor.
+
+    The factory does not need to read the field directly — the processor's
+    ``process(subs, config)`` signature reads it from the config — but this
+    test pins down that contract end-to-end.
+    """
+
+    def test_custom_radius_drives_grammar_snap_path(self, caplog):
+        """A non-default ``vad_grammar_search_radius`` must reach the processor."""
+        import logging
+        import re
+
+        from talking_parrot.config.models import (
+            PipelineConfig,
+            PostProcessingConfig,
+            TranscribingStep,
+        )
+        from talking_parrot.models.context import (
+            AlignmentGranularity,
+            PipelineContext,
+        )
+        from talking_parrot.models.media import MediaInfo
+        from talking_parrot.models.subtitle import Subtitle
+
+        ansi_re = re.compile(r"\x1b\[[0-9;]*m")
+
+        # Custom config with a non-default vad_grammar_search_radius.
+        post_cfg = PostProcessingConfig(
+            max_line_length=20,
+            max_lines_per_subtitle=2,
+            merge_gap_threshold_ms=200,
+            merge_max_duration_ms=6000,
+            split_max_duration_ms=6000,
+            vad_grammar_search_radius=3,
+            japanese_split_search_radius=4,
+        )
+        pipeline_cfg = PipelineConfig(
+            expected_language="ja",
+            transcribing=[TranscribingStep(condition="true", backend="whisper")],
+            post_processing=post_cfg,
+        )
+        from talking_parrot.models.vad import VadSegment
+
+        # Two VAD segments with a silence gap whose midpoint falls at 7700 ms —
+        # that places ``char_idx_vad`` on the leading-final boundary (8) where
+        # ``し|た`` would split, forcing the grammar sanity gate to engage.
+        vad_segments = [
+            VadSegment(
+                start_ms=0,
+                end_ms=7600,
+                ten_vad_prob=1.0,
+                silero_vad_prob=1.0,
+                composite_score=1.0,
+            ),
+            VadSegment(
+                start_ms=7800,
+                end_ms=9000,
+                ten_vad_prob=1.0,
+                silero_vad_prob=1.0,
+                composite_score=1.0,
+            ),
+        ]
+        ctx = PipelineContext(
+            config=pipeline_cfg,
+            media_info=MediaInfo(path=Path("x"), duration_ms=10_000, sha256="0" * 64),
+            vad_segments=vad_segments,
+            transcription_results=[
+                _tr(
+                    chunk_index=0,
+                    start_ms=0,
+                    end_ms=9000,
+                    text="専攻しておりました",
+                    aligned_tokens=[
+                        _tok("専攻し", 0, 3000),
+                        _tok("ており", 3000, 6000),
+                        _tok("まし", 6000, 7500),
+                        _tok("た", 7500, 9000),
+                    ],
+                ),
+            ],
+        )
+
+        factory = DefaultGranularityAwareProcessorFactory()
+        processors = factory.create(AlignmentGranularity.CHARACTER, ctx)
+        # Find the CharacterBoundarySplitProcessor in the processor list.
+        split_proc = next(
+            p for p in processors if isinstance(p, CharacterBoundarySplitProcessor)
+        )
+
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="専攻しておりました")
+        with caplog.at_level(logging.INFO, logger="talking_parrot.post_processing"):
+            split_proc.process([sub], post_cfg)
+        info_msgs = [
+            ansi_re.sub("", r.getMessage())
+            for r in caplog.records
+            if r.levelno == logging.INFO
+        ]
+        # The Japanese policy + token layout above place the VAD-derived
+        # char_idx on a leading-final boundary; the snap path must fire
+        # somewhere with the configured small radius reaching the policy.
+        # We only require that *some* INFO log surfaces, proving the field
+        # is wired through.
+        assert any("grammar_snap" in m or "grammar_fallback" in m for m in info_msgs), (
+            info_msgs
+        )

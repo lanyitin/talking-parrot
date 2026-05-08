@@ -15,10 +15,7 @@
 
 來源：對 `test-samples/sample1` 的人工驗證（2026-05-08），確認 `vad-driven-cue-split` 解決了所有先前的 leading-final 案例，但 VAD-driven 路徑相信 silence midpoint + aligned tokens、跳過了 `JapaneseSplitBoundaryPolicy` 的把關，導致兩處新的 morpheme-internal 切點：
 
-- [ ] **VAD-driven 切點需經文法 sanity check**：當 VAD 找到的 silence 落在助動詞或動詞活用尾內部時，aligned tokens 會老實地把 char_idx 對到 morpheme 中央。實際輸出有兩處：
-  - cue 7/8：「専攻しておりまし / た」（まし／た 切開）
-  - cue 9/10：「覚えていま / す」（い ま／す 切開）
-
-  建議方向：VAD-driven 路徑算出 char_idx 後，再丟給 `JapaneseSplitBoundaryPolicy._is_valid`；若 invalid 則在小範圍內找最近 valid 位置，或退回完整文法 fallback。VAD 仍是主要訊號，文法只當 sanity gate。
-
-  備註：本項是「把 VAD-driven char_idx 接上文法 sanity check 的管道」，上方的「複合詞 / 漢字詞典保護」則是「擴充 `_is_valid` 查詢的內容」。本項落地後，未來複合詞保護一旦進入 `_is_valid`，VAD-driven 路徑會自動受惠，無須再改 character_boundary 端。建議先做本項（純配線、無新依賴），複合詞保護待設計確定後再開新 change。
+- [x] **VAD-driven 切點需經文法 sanity check**：分兩階段解決——
+  - 配線（VAD-driven char_idx 通過 `JapaneseSplitBoundaryPolicy.is_valid` → 小半徑 snap → linear-fallback 三段判斷）由 `vad-grammar-sanity-gate`（archived 2026-05-09）落地。
+  - 後續對 `test-samples/sample1` 的回測（2026-05-09）發現 sanity gate 在 cue 9/10 仍把「覚えてい / ます…」切出 leading-final，根因是 `JapaneseSplitBoundaryPolicy.adjust` 平手時偏好較小 index，正好把跨切點的 no-split unit「ます」推到下一句開頭。由 `straddle-aware-tie-break`（archived 2026-05-09）改為「candidate 被 no-split unit straddle 時，平手偏好較大 index」修正。
+  - 配線生效後，未來 `is_valid` 加入更多規則（如下方複合詞保護），VAD-driven 路徑會自動受惠，無須再動 character_boundary。

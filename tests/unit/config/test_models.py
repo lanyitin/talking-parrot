@@ -413,6 +413,24 @@ class TestPostProcessingConfigSplitTimeSnapRadiusField:
             PostProcessingConfig(split_time_snap_radius_ms=2001)
 
 
+class TestPostProcessingConfigVadGrammarSearchRadius:
+    """Defaults and validation for `vad_grammar_search_radius` (ADR-0004)."""
+
+    def test_default_vad_grammar_search_radius(self):
+        """`vad_grammar_search_radius` defaults to 2."""
+        assert PostProcessingConfig().vad_grammar_search_radius == 2
+
+    def test_vad_grammar_search_radius_zero_accepted(self):
+        """Boundary: `vad_grammar_search_radius=0` MUST be accepted."""
+        cfg = PostProcessingConfig(vad_grammar_search_radius=0)
+        assert cfg.vad_grammar_search_radius == 0
+
+    def test_vad_grammar_search_radius_negative_rejected(self):
+        """`vad_grammar_search_radius=-1` MUST raise `ValidationError`."""
+        with pytest.raises(pydantic.ValidationError):
+            PostProcessingConfig(vad_grammar_search_radius=-1)
+
+
 class TestHallucinationFilterAllRulesDisabled:
     """Reject `enabled=True` while every per-rule toggle is False (silent no-op guard)."""
 

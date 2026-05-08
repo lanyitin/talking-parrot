@@ -122,6 +122,12 @@ class PostProcessingConfig(BaseModel):
             toward the nearest VAD silence midpoint. Must be in
             ``[0, 2000]``. ``0`` disables snapping (factory selects
             ``LinearSplitTimePolicy``).
+        vad_grammar_search_radius: Half-width (in characters) of the
+            window used by ``CharacterBoundarySplitProcessor`` when
+            snapping a VAD-derived ``char_idx`` to the nearest
+            grammar-valid boundary (sanity-gate sub-path 3b in
+            ``character-boundary-processors``; see ADR-0004). Must be
+            ``>= 0``.
     """
 
     model_config = {"extra": "forbid"}
@@ -197,6 +203,15 @@ class PostProcessingConfig(BaseModel):
         default_factory=lambda: ["た", "だ", "る", "い"]
     )
     split_time_snap_radius_ms: int = 250
+    vad_grammar_search_radius: int = 2
+
+    @field_validator("vad_grammar_search_radius")
+    @classmethod
+    def _vad_grammar_search_radius_non_negative(cls, v: int) -> int:
+        """Validate that ``vad_grammar_search_radius`` is non-negative."""
+        if v < 0:
+            raise ValueError(f"vad_grammar_search_radius ({v}) must be >= 0")
+        return v
 
     @field_validator("split_time_snap_radius_ms")
     @classmethod

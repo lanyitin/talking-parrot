@@ -43,6 +43,26 @@ class SplitBoundaryPolicy(Protocol):
         """
         ...
 
+    def is_valid(self, text: str, index: int) -> bool:
+        """Return whether ``index`` is a non-forbidden cut point inside ``text``.
+
+        Implementations MUST be pure and MUST NOT mutate ``text``.
+        Contract: if ``is_valid(text, i)`` is True then ``adjust(text, i, 0)``
+        SHALL return ``i`` (radius-0 fixed point).
+
+        Args:
+            text: The cue's text. Implementations MUST NOT mutate it.
+            index: A candidate split index. Callers SHALL clamp to
+                ``[1, len(text) - 1]`` before calling; behaviour outside
+                that range is unspecified.
+
+        Returns:
+            ``True`` when cutting between ``text[index - 1]`` and
+            ``text[index]`` is permitted by the policy's rules,
+            ``False`` otherwise.
+        """
+        ...
+
 
 class LinearSplitBoundaryPolicy:
     """No-op policy that returns the candidate index unchanged.
@@ -54,3 +74,7 @@ class LinearSplitBoundaryPolicy:
     def adjust(self, text: str, candidate_index: int, search_radius: int) -> int:
         """Return ``candidate_index`` verbatim, ignoring ``search_radius``."""
         return candidate_index
+
+    def is_valid(self, text: str, index: int) -> bool:
+        """Return ``True`` unconditionally — every in-range index is valid."""
+        return True

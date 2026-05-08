@@ -126,6 +126,7 @@ class CharacterBoundarySplitProcessor(SubtitleProcessor):
             n = math.ceil(duration / config.split_max_duration_ms)
             text_len = len(sub.text)
             radius = config.japanese_split_search_radius
+            vad_grammar_radius = config.vad_grammar_search_radius
             tokens = self._token_map_by_index.get(sub.index, [])
             token_ends = [t.end_ms for t in tokens]
 
@@ -139,8 +140,18 @@ class CharacterBoundarySplitProcessor(SubtitleProcessor):
                     # Find the first token whose end_ms >= silence_midpoint, i.e.
                     # the token containing the silence or the first token after it.
                     found_idx = bisect.bisect_left(token_ends, silence_midpoint)
-                    char_idx = sum(len(t.word) for t in tokens[:found_idx])
-                    char_idx = max(1, min(char_idx, text_len - 1))
+                    char_idx_vad = sum(len(t.word) for t in tokens[:found_idx])
+                    char_idx_vad = max(1, min(char_idx_vad, text_len - 1))
+                    char_idx = self._sanity_gate(
+                        sub=sub,
+                        char_idx_vad=char_idx_vad,
+                        duration=duration,
+                        n=n,
+                        slice_index=i,
+                        text_len=text_len,
+                        vad_grammar_radius=vad_grammar_radius,
+                        legacy_radius=radius,
+                    )
                     inner.append((silence_midpoint, char_idx))
                 else:
                     if silence_midpoint is None:
@@ -220,3 +231,66 @@ class CharacterBoundarySplitProcessor(SubtitleProcessor):
         """Return ``time_policy.adjust`` of the linear slice-end timestamp."""
         linear_ms = sub.start_ms + (i * duration) // n
         return self._time_policy.adjust(linear_ms, sub.start_ms, sub.end_ms)
+
+    def _sanity_gate(
+        self,
+        *,
+        sub: Subtitle,
+        char_idx_vad: int,
+        duration: int,
+        n: int,
+        slice_index: int,
+        text_len: int,
+        vad_grammar_radius: int,
+        legacy_radius: int,
+    ) -> int:
+        """Route ``char_idx_vad`` through grammar sanity check (ADR-0004).
+
+        Three sub-paths:
+
+        * 3a — ``policy.is_valid(char_idx_vad)`` True → use it (no log).
+        * 3b — small-radius ``policy.adjust`` snaps to a valid index → use
+          it and log INFO ``grammar_snap``.
+        * 3c — small-radius snap fails → re-run ``policy.adjust`` against
+          the linear-interpolation candidate with the legacy
+          ``japanese_split_search_radius`` and log INFO ``grammar_fallback``.
+
+        Time boundary stays as the silence midpoint in all three sub-paths
+        (the caller passes that through unchanged); only the text cut index
+        varies between the three sub-paths.
+        """
+        policy = self._policy
+        text = sub.text
+        # Path 3a: VAD-derived index is already grammar-valid.
+        if policy.is_valid(text, char_idx_vad):
+            return char_idx_vad
+        # Path 3b: try a small-radius snap to the nearest valid boundary.
+        snapped = policy.adjust(text, char_idx_vad, vad_grammar_radius)
+        if policy.is_valid(text, snapped):
+            logger.info(
+                "grammar_snap",
+                cue_id=sub.index,
+                char_idx_vad=char_idx_vad,
+                char_idx_final=snapped,
+                fallback_reason="grammar_snap",
+            )
+            return snapped
+        # Path 3c: fall back to the linear-interpolation candidate with the
+        # larger legacy radius. This is the safety net for cases where the
+        # VAD silence lands inside a region (e.g. a long katakana run) with
+        # no valid boundary nearby — the linear midpoint is more likely to
+        # land in usable territory.
+        linear_slice_end_ms = sub.start_ms + (slice_index * duration) // n
+        linear_candidate = round(
+            (linear_slice_end_ms - sub.start_ms) / duration * text_len
+        )
+        linear_candidate = max(1, min(linear_candidate, text_len - 1))
+        char_idx_final = policy.adjust(text, linear_candidate, legacy_radius)
+        logger.info(
+            "grammar_fallback",
+            cue_id=sub.index,
+            char_idx_vad=char_idx_vad,
+            char_idx_final=char_idx_final,
+            fallback_reason="grammar_fallback",
+        )
+        return char_idx_final

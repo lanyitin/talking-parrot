@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import re
 
 import pytest
 
@@ -16,6 +17,13 @@ from talking_parrot.post_processing.character_boundary import (
     CharacterBoundaryMergeProcessor,
     CharacterBoundarySplitProcessor,
 )
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _strip_ansi(s: str) -> str:
+    """Remove ANSI escape sequences emitted by structlog's ConsoleRenderer."""
+    return _ANSI_RE.sub("", s)
 
 
 @pytest.fixture
@@ -471,6 +479,36 @@ class TestCharacterBoundarySplitVadFallback:
             for r in caplog.records
         )
 
+    def test_none_token_map_treated_as_empty_dict_no_info_log(self, cfg, caplog):
+        """Legacy `empty_token_map` fallback MUST NOT emit `grammar_snap` / `grammar_fallback` INFO logs."""
+        from talking_parrot.models.transcription import AlignedToken
+
+        class _PickAt4500:
+            def adjust(
+                self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int
+            ) -> int:
+                return candidate_ms
+
+            def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+                return 4500
+
+        sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+        with caplog.at_level(logging.INFO, logger="talking_parrot.post_processing"):
+            CharacterBoundarySplitProcessor(
+                token_map_by_index={},
+                time_policy=_PickAt4500(),
+            ).process([sub], cfg)
+        info_msgs = [
+            _strip_ansi(r.getMessage())
+            for r in caplog.records
+            if r.levelno == logging.INFO
+        ]
+        assert not any(
+            "grammar_snap" in m or "grammar_fallback" in m for m in info_msgs
+        ), info_msgs
+        # Suppress unused-import lint when AlignedToken stays unreferenced.
+        _ = AlignedToken
+
     def test_none_token_map_treated_as_empty_dict(self, cfg, caplog):
         """Spec scenario: ``token_map_by_index=None`` ≡ ``{}`` → fallback."""
 
@@ -495,3 +533,202 @@ class TestCharacterBoundarySplitVadFallback:
             r.levelno == logging.DEBUG and "empty_token_map" in r.getMessage()
             for r in caplog.records
         )
+
+
+class _StubPickPolicy:
+    """Time policy stub: `pick` returns a fixed midpoint, `adjust` is identity."""
+
+    def __init__(self, midpoint: int) -> None:
+        self._midpoint = midpoint
+
+    def adjust(self, candidate_ms: int, cue_start_ms: int, cue_end_ms: int) -> int:
+        return candidate_ms
+
+    def pick(self, cue_start_ms: int, cue_end_ms: int) -> int | None:
+        return self._midpoint
+
+
+class _ValidAtAllIndexes:
+    """Boundary policy where every index is valid (Path 3a driver)."""
+
+    def __init__(self) -> None:
+        self.adjust_calls: list[tuple[str, int, int]] = []
+
+    def adjust(self, text: str, candidate_index: int, search_radius: int) -> int:
+        self.adjust_calls.append((text, candidate_index, search_radius))
+        return candidate_index
+
+    def is_valid(self, text: str, index: int) -> bool:
+        return True
+
+
+class _SnapAtSmallRadius:
+    """Path 3b driver: `is_valid(5)`=False, `adjust(5, small)` snaps to 6, `is_valid(6)`=True."""
+
+    def __init__(self, *, snap_target: int = 6, small_radius: int) -> None:
+        self._snap_target = snap_target
+        self._small_radius = small_radius
+        self.adjust_calls: list[tuple[str, int, int]] = []
+
+    def adjust(self, text: str, candidate_index: int, search_radius: int) -> int:
+        self.adjust_calls.append((text, candidate_index, search_radius))
+        # Snap only when called with the small (vad_grammar_search_radius) window.
+        if search_radius == self._small_radius:
+            return self._snap_target
+        return candidate_index
+
+    def is_valid(self, text: str, index: int) -> bool:
+        # 5 is the VAD-derived index for the test fixture; 6 is the snap target.
+        return index == self._snap_target
+
+
+class _FallbackToLegacyRadius:
+    """Path 3c driver: nothing valid at small radius, but `adjust(5, legacy)` returns 7."""
+
+    def __init__(self, *, fallback_target: int = 7, small_radius: int) -> None:
+        self._fallback_target = fallback_target
+        self._small_radius = small_radius
+        self.adjust_calls: list[tuple[str, int, int]] = []
+
+    def adjust(self, text: str, candidate_index: int, search_radius: int) -> int:
+        self.adjust_calls.append((text, candidate_index, search_radius))
+        if search_radius == self._small_radius:
+            # No valid index in the small window — return the candidate unchanged.
+            return candidate_index
+        # Larger (legacy) window — snap to the fallback target.
+        return self._fallback_target
+
+    def is_valid(self, text: str, index: int) -> bool:
+        return index == self._fallback_target
+
+
+def _vad_fixture_cue_and_tokens():
+    """Cue fixture where `silence_midpoint=4200` yields `char_idx_vad=5`."""
+    from talking_parrot.models.transcription import AlignedToken
+
+    sub = Subtitle(index=1, start_ms=0, end_ms=9000, text="あいうえおかきくけこ")
+    tokens = [
+        AlignedToken(word="あいうえお", start_ms=0, end_ms=4000, score=1.0),
+        AlignedToken(word="かきくけこ", start_ms=4000, end_ms=9000, score=1.0),
+    ]
+    return sub, tokens
+
+
+class TestCharacterBoundarySplitVadGrammarSanityGate:
+    """ADR-0004: VAD-driven `char_idx` is gated by `policy.is_valid` before use.
+
+    All three sub-paths share the same VAD fixture (silence midpoint 4200,
+    char_idx_vad 5). Each test drives a different sub-path by stubbing
+    `policy`. INFO log assertions live in this class because the log fields
+    are part of the spec contract for sub-paths 3b and 3c.
+    """
+
+    def test_path_3a_vad_valid_uses_char_idx_vad_and_emits_no_info_log(
+        self, cfg, caplog
+    ):
+        """Sub-path 3a: `is_valid(char_idx_vad)` True → use it, no INFO log."""
+        sub, tokens = _vad_fixture_cue_and_tokens()
+        policy = _ValidAtAllIndexes()
+        with caplog.at_level(logging.INFO, logger="talking_parrot.post_processing"):
+            out = CharacterBoundarySplitProcessor(
+                policy=policy,
+                time_policy=_StubPickPolicy(4200),
+                token_map_by_index={1: tokens},
+            ).process([sub], cfg)
+        assert len(out) == 2
+        assert out[0].text == "あいうえお"
+        assert out[1].text == "かきくけこ"
+        assert (out[0].start_ms, out[0].end_ms) == (0, 4200)
+        info_msgs = [
+            _strip_ansi(r.getMessage())
+            for r in caplog.records
+            if r.levelno == logging.INFO
+        ]
+        assert not any(
+            "grammar_snap" in m or "grammar_fallback" in m for m in info_msgs
+        ), info_msgs
+
+    def test_path_3b_grammar_snap_uses_snapped_index_and_logs_grammar_snap(
+        self, caplog
+    ):
+        """Sub-path 3b: small-radius snap returns valid index → use it, log INFO grammar_snap."""
+        sub, tokens = _vad_fixture_cue_and_tokens()
+        custom_cfg = PostProcessingConfig(
+            max_line_length=20,
+            max_lines_per_subtitle=2,
+            merge_gap_threshold_ms=200,
+            merge_max_duration_ms=6000,
+            split_max_duration_ms=6000,
+            vad_grammar_search_radius=2,
+            japanese_split_search_radius=4,
+        )
+        policy = _SnapAtSmallRadius(snap_target=6, small_radius=2)
+        with caplog.at_level(logging.INFO, logger="talking_parrot.post_processing"):
+            out = CharacterBoundarySplitProcessor(
+                policy=policy,
+                time_policy=_StubPickPolicy(4200),
+                token_map_by_index={1: tokens},
+            ).process([sub], custom_cfg)
+        # Text snapped from 5 → 6.
+        assert out[0].text == "あいうえおか"
+        assert out[1].text == "きくけこ"
+        # Time still tracks the silence midpoint.
+        assert (out[0].start_ms, out[0].end_ms) == (0, 4200)
+        # Exactly one INFO log line with all four required fields.
+        info_msgs = [
+            _strip_ansi(r.getMessage())
+            for r in caplog.records
+            if r.levelno == logging.INFO
+        ]
+        snap_msgs = [m for m in info_msgs if "grammar_snap" in m]
+        assert len(snap_msgs) == 1, info_msgs
+        m = snap_msgs[0]
+        assert "cue_id=1" in m
+        assert "char_idx_vad=5" in m
+        assert "char_idx_final=6" in m
+        assert "fallback_reason=grammar_snap" in m
+        # First adjust call was at the small radius from config.
+        assert policy.adjust_calls[0][2] == 2
+
+    def test_path_3c_grammar_fallback_uses_legacy_radius_and_logs_grammar_fallback(
+        self, caplog
+    ):
+        """Sub-path 3c: small-radius snap fails → fallback to legacy radius, log INFO grammar_fallback."""
+        sub, tokens = _vad_fixture_cue_and_tokens()
+        custom_cfg = PostProcessingConfig(
+            max_line_length=20,
+            max_lines_per_subtitle=2,
+            merge_gap_threshold_ms=200,
+            merge_max_duration_ms=6000,
+            split_max_duration_ms=6000,
+            vad_grammar_search_radius=2,
+            japanese_split_search_radius=4,
+        )
+        policy = _FallbackToLegacyRadius(fallback_target=7, small_radius=2)
+        with caplog.at_level(logging.INFO, logger="talking_parrot.post_processing"):
+            out = CharacterBoundarySplitProcessor(
+                policy=policy,
+                time_policy=_StubPickPolicy(4200),
+                token_map_by_index={1: tokens},
+            ).process([sub], custom_cfg)
+        # Text fell through to fallback target 7.
+        assert out[0].text == "あいうえおかき"
+        assert out[1].text == "くけこ"
+        # Time still tracks the silence midpoint (VAD signal preserved).
+        assert (out[0].start_ms, out[0].end_ms) == (0, 4200)
+        info_msgs = [
+            _strip_ansi(r.getMessage())
+            for r in caplog.records
+            if r.levelno == logging.INFO
+        ]
+        fallback_msgs = [m for m in info_msgs if "grammar_fallback" in m]
+        assert len(fallback_msgs) == 1, info_msgs
+        m = fallback_msgs[0]
+        assert "cue_id=1" in m
+        assert "char_idx_vad=5" in m
+        assert "char_idx_final=7" in m
+        assert "fallback_reason=grammar_fallback" in m
+        # The processor must have invoked adjust at both radii.
+        radii_seen = [c[2] for c in policy.adjust_calls]
+        assert 2 in radii_seen
+        assert 4 in radii_seen

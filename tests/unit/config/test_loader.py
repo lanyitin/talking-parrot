@@ -70,6 +70,59 @@ class TestConfigLoaderParsesYAML:
         assert cfg.post_processing is not None
 
 
+class TestConfigLoaderVadGrammarSearchRadius:
+    """YAML round-trip for `post_processing.vad_grammar_search_radius` (ADR-0004)."""
+
+    def test_omitted_key_defaults_to_two(self, tmp_path):
+        """Omitted YAML key MUST yield default `2`."""
+        f = tmp_path / "config.yaml"
+        f.write_text(
+            textwrap.dedent("""\
+                transcribing:
+                  - condition: "true"
+                    backend: faster-whisper
+                post_processing:
+                  enabled: true
+                """)
+        )
+        cfg = ConfigLoader.load(str(f))
+        assert cfg.post_processing is not None
+        assert cfg.post_processing.vad_grammar_search_radius == 2
+
+    def test_explicit_zero_accepted(self, tmp_path):
+        """Explicit `0` MUST round-trip as `0`."""
+        f = tmp_path / "config.yaml"
+        f.write_text(
+            textwrap.dedent("""\
+                transcribing:
+                  - condition: "true"
+                    backend: faster-whisper
+                post_processing:
+                  enabled: true
+                  vad_grammar_search_radius: 0
+                """)
+        )
+        cfg = ConfigLoader.load(str(f))
+        assert cfg.post_processing is not None
+        assert cfg.post_processing.vad_grammar_search_radius == 0
+
+    def test_negative_value_rejected(self, tmp_path):
+        """Explicit `-1` MUST raise `ValidationError`."""
+        f = tmp_path / "config.yaml"
+        f.write_text(
+            textwrap.dedent("""\
+                transcribing:
+                  - condition: "true"
+                    backend: faster-whisper
+                post_processing:
+                  enabled: true
+                  vad_grammar_search_radius: -1
+                """)
+        )
+        with pytest.raises(pydantic.ValidationError):
+            ConfigLoader.load(str(f))
+
+
 class TestConfigLoaderRejectsUnknownFields:
     def test_unknown_top_level_field_raises(self, tmp_path):
         f = tmp_path / "config.yaml"

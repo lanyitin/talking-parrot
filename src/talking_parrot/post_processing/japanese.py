@@ -243,23 +243,40 @@ class JapaneseSplitBoundaryPolicy:
         if lo > hi:
             return candidate_index
 
+        # Tie-break direction: when the candidate sits inside a no-split unit
+        # (e.g., the cut at 「ま | す」 inside 「ます」), prefer snapping PAST the
+        # unit so it trails the previous cue rather than leading the next one.
+        # Otherwise prefer the smaller index for deterministic, left-leaning cuts.
+        prefer_after_unit = self._straddles_no_split_unit(text, candidate_index)
+
         best_idx: int | None = None
         best_dist: int = -1
         for i in range(lo, hi + 1):
-            if not self._is_valid(text, i):
+            if not self.is_valid(text, i):
                 continue
             dist = abs(i - candidate_index)
-            # smallest distance wins; tie → smaller index (loop ascends, so
-            # the first index at a given distance keeps the slot)
             if best_idx is None or dist < best_dist:
                 best_idx = i
                 best_dist = dist
+                continue
+            if dist == best_dist and prefer_after_unit:
+                # Loop ascends so i > best_idx by construction; the rightmost
+                # valid index at the smallest distance wins.
+                best_idx = i
         if best_idx is None:
             return candidate_index
         return best_idx
 
-    def _is_valid(self, text: str, i: int) -> bool:
-        """Return True if cutting between ``text[i-1]`` and ``text[i]`` is valid."""
+    def is_valid(self, text: str, index: int) -> bool:
+        """Return True if cutting between ``text[index-1]`` and ``text[index]`` is valid.
+
+        Public sanity-gate predicate (see ADR-0004). Returns ``False`` if any
+        of the configured rules apply (Mid-katakana, Mid-digit,
+        Mid-no-split-unit, Leading-particle, Leading-final), otherwise
+        ``True``. ``adjust`` routes through this same predicate to guarantee
+        the two methods cannot disagree.
+        """
+        i = index
         left = text[i - 1]
         right = text[i]
 
@@ -269,19 +286,9 @@ class JapaneseSplitBoundaryPolicy:
         # Mid-digit
         if _is_digit(left) and _is_digit(right):
             return False
-        # Mid-no-split-unit: any configured unit u and offset k in [1, len(u)-1]
-        # such that text[i-k : i-k+len(u)] == u.
-        for unit in self._no_split_units:
-            ulen = len(unit)
-            if ulen < 2:
-                continue
-            for k in range(1, ulen):
-                start = i - k
-                end = start + ulen
-                if start < 0 or end > len(text):
-                    continue
-                if text[start:end] == unit:
-                    return False
+        # Mid-no-split-unit
+        if self._straddles_no_split_unit(text, index):
+            return False
         # Leading-particle
         for particle in self._no_leading_particles:
             if text.startswith(particle, i):
@@ -292,6 +299,27 @@ class JapaneseSplitBoundaryPolicy:
                 if text.startswith(final, i):
                     return False
         return True
+
+    def _straddles_no_split_unit(self, text: str, index: int) -> bool:
+        """Return True if any configured no-split unit straddles ``index``.
+
+        "Straddles" means there exists a configured unit ``u`` (length >= 2)
+        and an offset ``k`` in ``[1, len(u) - 1]`` such that
+        ``text[index - k : index - k + len(u)] == u`` — i.e., the cut at
+        ``index`` would land strictly inside an occurrence of ``u``.
+        """
+        for unit in self._no_split_units:
+            ulen = len(unit)
+            if ulen < 2:
+                continue
+            for k in range(1, ulen):
+                start = index - k
+                end = start + ulen
+                if start < 0 or end > len(text):
+                    continue
+                if text[start:end] == unit:
+                    return True
+        return False
 
 
 def _collapse_repetitions(text: str, whitelist_re: re.Pattern[str] | None) -> str:
