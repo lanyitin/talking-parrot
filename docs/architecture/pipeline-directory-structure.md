@@ -44,15 +44,6 @@ talking-parrot/
 │       │   ├── __init__.py
 │       │   └── orchestrator.py   # PipelineOrchestrator
 │       │
-│       ├── stages/            # Stage 實作（每個 Stage 一個模組）
-│       │   ├── __init__.py
-│       │   ├── base.py        # PipelineStage 抽象介面
-│       │   ├── vad_stage.py
-│       │   ├── chunking_stage.py
-│       │   ├── transcription_stage.py
-│       │   ├── alignment_stage.py
-│       │   └── post_processing_stage.py
-│       │
 │       ├── vad/               # VAD 子系統
 │       │   ├── __init__.py
 │       │   ├── backend.py     # VADBackend 抽象介面
@@ -75,24 +66,40 @@ talking-parrot/
 │       │
 │       ├── post_processing/   # 後處理子系統（粒度感知）
 │       │   ├── __init__.py
-│       │   ├── base.py        # SubtitleProcessor 抽象介面
-│       │   ├── factory.py     # GranularityAwareProcessorFactory
-│       │   ├── word_boundary.py       # WordBoundaryMergeProcessor / WordBoundarySplitProcessor
+│       │   ├── base.py              # SubtitleProcessor 抽象介面
+│       │   ├── factory.py           # GranularityAwareProcessorFactory（抽象 + DefaultImpl）
+│       │   ├── word_boundary.py     # WordBoundaryMergeProcessor / WordBoundarySplitProcessor
 │       │   ├── character_boundary.py  # CharacterBoundaryMergeProcessor / CharacterBoundarySplitProcessor
-│       │   └── time_based.py          # TimeBasedMergeProcessor / TimeBasedSplitProcessor (fallback)
+│       │   ├── time_based.py        # TimeBasedMergeProcessor / TimeBasedSplitProcessor (fallback)
+│       │   ├── dedup.py             # DedupSubtitleProcessor（重複字幕去除）
+│       │   ├── japanese.py          # JapaneseFillerProcessor / JapaneseRepetitionProcessor
+│       │   ├── split_policy.py      # SplitBoundaryPolicy protocol + LinearSplitBoundaryPolicy
+│       │   │                        # + JapaneseSplitBoundaryPolicy
+│       │   └── split_time_policy.py # SplitTimePolicy protocol + LinearSplitTimePolicy
+│       │                            # + VadAlignedSplitTimePolicy
 │       │
-│       ├── export/            # 字幕輸出子系統
+│       ├── stages/            # Stage 實作（每個 Stage 一個模組）
 │       │   ├── __init__.py
-│       │   ├── base.py        # SubtitleExporter 抽象介面
-│       │   ├── srt.py         # SRTExporter
-│       │   └── webvtt.py      # WebVTTExporter
+│       │   ├── base.py                     # PipelineStage 抽象介面
+│       │   ├── vad_stage.py
+│       │   ├── chunking_stage.py
+│       │   ├── transcription_stage.py
+│       │   ├── hallucination_filter_stage.py  # HallucinationFilterStage
+│       │   ├── alignment_stage.py
+│       │   └── post_processing_stage.py
 │       │
 │       ├── io/                # I/O 工具
 │       │   ├── __init__.py
-│       │   ├── media_hasher.py     # MediaHasher
-│       │   ├── audio_decoder.py    # 音訊解碼（ffmpeg 包裝）
-│       │   ├── audio_reader.py     # AudioReader 介面 + ffmpeg 實作（區間懶讀 + LRU 快取）
-│       │   └── project_writer.py   # ProjectFileWriter
+│       │   ├── media_hasher.py      # MediaHasher
+│       │   ├── audio_decoder.py     # 音訊解碼（ffmpeg 包裝）
+│       │   ├── audio_reader.py      # AudioReader 介面 + ffmpeg 實作（區間懶讀 + LRU 快取）
+│       │   ├── project_writer.py    # ProjectFileWriter
+│       │   └── subtitle_export/     # 字幕輸出子系統
+│       │       ├── __init__.py
+│       │       ├── base.py          # SubtitleExporter 抽象介面
+│       │       ├── factory.py       # SubtitleExporterFactory
+│       │       ├── srt.py           # SRTExporter
+│       │       └── webvtt.py        # WebVTTExporter
 │       │
 │       ├── expression/         # 安全表達式求值（共用）
 │       │   ├── __init__.py
@@ -123,7 +130,8 @@ talking-parrot/
     │   ├── pipeline-overview.md
     │   ├── pipeline-data-models.md
     │   ├── pipeline-module-interfaces.md
-    │   ├── pipeline-directory-structure.md  ← 本文件
+    │   ├── pipeline-directory-structure.md    ← 本文件
+    │   ├── pipeline-post-processing-processors.md
     │   ├── ADR-0001-跨平台轉錄後端.md
     │   ├── ADR-0002-condition-評估器.md
     │   └── ADR-0003-對齊粒度與後處理策略.md
@@ -217,3 +225,6 @@ python scripts/analyze_audio.py --file test-samples/sample1/base.mp3
 
 - [[pipeline-overview|系統架構總覽]]
 - [[pipeline-module-interfaces|模組介面設計]]
+- [[pipeline-post-processing-processors|後處理 Processor 家族]]
+
+相關 spec：[[../openspec/specs/pipeline-foundation/spec|pipeline-foundation]]、[[../openspec/specs/pipeline-end-to-end-wiring/spec|pipeline-end-to-end-wiring]]

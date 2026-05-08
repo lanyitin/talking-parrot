@@ -79,9 +79,11 @@ PipelineConfig
 ├── expected_language: str | None
 ├── vad: VadConfig | None
 ├── chunking: ChunkingConfig | None
-├── transcribing: List[TranscribingStep]
+├── transcribing: List[TranscribingStep]      # 必填，至少一個 step
+├── hallucination_filter: HallucinationFilterConfig | None
 ├── align: AlignConfig | None
-└── post_processing: PostProcessingConfig | None
+├── post_processing: PostProcessingConfig | None
+└── export: ExportConfig | None               # 選填；提供時輸出字幕檔
 ```
 
 ```
@@ -124,9 +126,34 @@ enum GranularityPreference:
 
 ```
 PostProcessingConfig
-├── merge_gap_threshold_ms: int     # 間隔小於此值的字幕才考慮合併
-├── merge_max_duration_ms: int      # 合併後字幕的最大長度上限
-└── split_max_duration_ms: int      # 超過此長度的字幕將被切分
+├── merge_gap_threshold_ms: int         # 間隔小於此值的字幕才考慮合併
+├── merge_max_duration_ms: int          # 合併後字幕的最大長度上限
+├── split_max_duration_ms: int          # 超過此長度的字幕將被切分
+├── max_line_length: int                # 單行最大字元數（影響 Merge 條件）
+├── max_lines_per_subtitle: int         # 每條字幕的最大行數（影響 Merge 條件）
+├── dedup_enabled: bool                 # 是否啟用重複字幕去除
+├── dedup_similarity_threshold: float   # 連續字幕相似度閾值（預設 0.9）
+├── dedup_max_gap_ms: int               # 連續重複字幕的最大間距（預設 600ms）
+├── japanese_filler_enabled: bool       # 是否移除日文語助詞開頭填充詞
+└── japanese_repetition_enabled: bool   # 是否折疊日文連續重複字元
+```
+
+```
+HallucinationFilterConfig
+├── enabled: bool
+├── known_hallucination_phrases: List[str]  # 精確短語黑名單
+├── filter_bracket_only: bool               # 是否過濾括號包圍的純文字（預設 True）
+├── filter_long_repetition: bool            # 是否過濾長重複字元（5+ 個相同字元，預設 True）
+├── min_avg_logprob: float                  # logprob 下限（低於此值且 no_speech_prob 高時過濾）
+├── max_no_speech_prob: float               # no_speech_prob 上限（配合 min_avg_logprob）
+├── max_compression_ratio: float            # 壓縮比上限
+└── max_repetition_ratio: float             # 重複率上限
+```
+
+```
+ExportConfig
+├── format: Literal["srt", "webvtt"]    # 輸出字幕格式
+└── output_path: str                     # 輸出路徑（不可為空）
 ```
 
 ---
@@ -263,3 +290,5 @@ sequenceDiagram
 - [[pipeline-overview|系統架構總覽]]
 - [[pipeline-module-interfaces|模組介面設計]]
 - [[ADR-0002-condition-評估器]]
+
+相關 spec：[[../openspec/specs/pipeline-data-models/spec|pipeline-data-models]]、[[../openspec/specs/pipeline-config/spec|pipeline-config]]、[[../openspec/specs/export-config/spec|export-config]]、[[../openspec/specs/hallucination-filter-stage/spec|hallucination-filter-stage]]

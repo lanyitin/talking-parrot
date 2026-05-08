@@ -20,3 +20,5 @@
   - cue 9/10：「覚えていま / す」（い ま／す 切開）
 
   建議方向：VAD-driven 路徑算出 char_idx 後，再丟給 `JapaneseSplitBoundaryPolicy._is_valid`；若 invalid 則在小範圍內找最近 valid 位置，或退回完整文法 fallback。VAD 仍是主要訊號，文法只當 sanity gate。
+
+  備註：本項是「把 VAD-driven char_idx 接上文法 sanity check 的管道」，上方的「複合詞 / 漢字詞典保護」則是「擴充 `_is_valid` 查詢的內容」。本項落地後，未來複合詞保護一旦進入 `_is_valid`，VAD-driven 路徑會自動受惠，無須再改 character_boundary 端。建議先做本項（純配線、無新依賴），複合詞保護待設計確定後再開新 change。

@@ -274,7 +274,23 @@ interface GranularityAwareProcessorFactory:
 
 ---
 
-### 2.3 TranscriptionBackendFactory
+### 2.3 SubtitleExporterFactory
+
+```
+class SubtitleExporterFactory:
+    create(format_name: str) -> SubtitleExporter  (classmethod)
+        # 依 format_name 回傳對應的 SubtitleExporter 實作。
+        # 已知映射：
+        #   "srt"    -> SRTExporter
+        #   "webvtt" -> WebVTTExporter
+        # 未知 format_name 拋出 ValueError。
+```
+
+> 此工廠由 `cli.py` 在輸出階段呼叫，不注入到任何 Stage，只在 Orchestrator 完成後由 CLI 層使用。
+
+---
+
+### 2.4 TranscriptionBackendFactory
 
 ```
 class TranscriptionBackendFactory:
@@ -288,6 +304,50 @@ class TranscriptionBackendFactory:
 ```
 
 > **DIP 說明**：`TranscriptionStage` 只依賴 `TranscriptionBackend` 介面，`TranscriptionBackendFactory` 在應用程式入口點建立，並以建構子注入到 Stage 中。
+
+---
+
+### 2.5 Policy 介面（後處理策略注入點）
+
+後處理 Split 系列的 Processor 接受兩種可注入的 Policy 物件，讓拆行的「文字切點」與「時間戳記切點」邏輯可被獨立替換（OCP）。
+
+#### SplitBoundaryPolicy（文字切點 Policy）
+
+```
+protocol SplitBoundaryPolicy:
+    adjust(text: str, candidate_index: int, search_radius: int) -> int
+        # 接受字幕文字、線性內插得到的候選切點（字元 index），
+        # 以及搜尋半徑（字元數）。
+        # 回傳調整後的切點，必須在 [1, len(text) - 1] 範圍內。
+        # 實作必須為純函式，不得修改 text。
+```
+
+| 實作 | 行為 |
+|------|------|
+| `LinearSplitBoundaryPolicy` | 直接回傳 `candidate_index`（預設、無語言假設） |
+| `JapaneseSplitBoundaryPolicy` | 在 `search_radius` 內尋找符合日文語法規則的切點（不切助動詞、詞尾活用等）；找不到合法切點時退回 `candidate_index` |
+
+#### SplitTimePolicy（時間切點 Policy）
+
+```
+protocol SplitTimePolicy:
+    adjust(candidate_ms: int, cue_start_ms: int, cue_end_ms: int) -> int
+        # 接受線性內插的候選時間戳（ms）與字幕的時間區間。
+        # 回傳調整後的時間戳，必須嚴格在 (cue_start_ms, cue_end_ms) 內。
+        # 實作必須為純函式。
+
+    pick(cue_start_ms: int, cue_end_ms: int) -> int | None
+        # 在 cue 時間區間內尋找最佳靜音中點。
+        # 若無合適靜音段，回傳 None。
+        # 實作必須為純函式。
+```
+
+| 實作 | 行為 |
+|------|------|
+| `LinearSplitTimePolicy` | `adjust` 直接回傳 `candidate_ms`；`pick` 永遠回傳 `None`（預設） |
+| `VadAlignedSplitTimePolicy` | 建構時注入 VAD 靜音清單與搜尋半徑；`adjust` 在候選點附近找最近靜音中點；`pick` 回傳 cue 內最佳靜音中點（VAD driven 主路徑） |
+
+> **DIP 說明**：`CharacterBoundarySplitProcessor`、`WordBoundarySplitProcessor`、`TimeBasedSplitProcessor` 皆依賴這兩個 Protocol 的抽象，具體實作由 `GranularityAwareProcessorFactory` 在建構 Processor 時注入。
 
 ---
 
@@ -355,7 +415,30 @@ class TranscriptionStage implements PipelineStage:
 
 > **注意**：第一個 step 必須使用 `condition: true`，因為初始 metrics 為空，任何引用欄位的表達式都會拋出 `ConditionError`。後續 step 的 condition 以前一次轉錄的 metrics 為基準，達成「級聯升級」效果。詳細評估流程見 [[ADR-0002-condition-評估器]]。
 
-### 3.4 AlignmentStage
+### 3.4 HallucinationFilterStage
+
+```
+class HallucinationFilterStage implements PipelineStage:
+    __init__(config: HallucinationFilterConfig)
+
+    process(ctx: PipelineContext) -> PipelineContext
+        # 若 config.enabled == False，直接回傳 ctx（transcription_results 不變）。
+        # 若 enabled == True，過濾 ctx.transcription_results 中符合以下任一規則的結果：
+        #   1. 精確短語匹配：text.strip() 完全等於 known_hallucination_phrases 中任一項
+        #   2. 括號文字：整段 text 被括號包圍（ASCII 或全形括號）
+        #   3. 長重複字元：包含 5 個以上連續相同非空白字元
+        #   4. 低 logprob + 高 no_speech_prob：同時滿足兩個指標閾值
+        #   5. 高壓縮比：compression_ratio 超過設定閾值
+        #   6. 高重複率：repetition_ratio 超過設定閾值
+        # 保留其餘結果的相對順序，回傳新的 PipelineContext。
+```
+
+> **SRP 說明**：HallucinationFilter 只負責品質過濾，不做任何文字修改或時間調整，符合單一職責。
+> **OCP 說明**：每條過濾規則有獨立的 enabled flag，新增規則只需擴充 `HallucinationFilterConfig`，不修改 Stage 邏輯。
+
+---
+
+### 3.5 AlignmentStage
 
 ```
 class AlignmentStage implements PipelineStage:
@@ -432,6 +515,9 @@ interface SubtitleProcessor:
 
 - [[pipeline-overview|系統架構總覽]]
 - [[pipeline-data-models|Pipeline 資料模型]]
+- [[pipeline-post-processing-processors|後處理 Processor 家族]]
 - [[ADR-0001-跨平台轉錄後端]]
 - [[ADR-0002-condition-評估器]]
 - [[ADR-0003-對齊粒度與後處理策略]]
+
+相關 spec：[[../openspec/specs/alignment-backend/spec|alignment-backend]]、[[../openspec/specs/alignment-backend-factory/spec|alignment-backend-factory]]、[[../openspec/specs/transcription-backend/spec|transcription-backend]]、[[../openspec/specs/transcription-backend-factory/spec|transcription-backend-factory]]、[[../openspec/specs/vad-backend/spec|vad-backend]]、[[../openspec/specs/subtitle-exporter/spec|subtitle-exporter]]、[[../openspec/specs/subtitle-exporter-factory/spec|subtitle-exporter-factory]]、[[../openspec/specs/hallucination-filter-stage/spec|hallucination-filter-stage]]、[[../openspec/specs/split-boundary-policy/spec|split-boundary-policy]]、[[../openspec/specs/split-time-policy/spec|split-time-policy]]

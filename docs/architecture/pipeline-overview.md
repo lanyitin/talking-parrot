@@ -50,7 +50,11 @@ graph TD
         F4[TranscriptionBackend interface]
     end
 
-    subgraph Stage_4[Stage 4: Alignment]
+    subgraph Stage_4[Stage 4: Hallucination Filter]
+        HF[HallucinationFilterStage]
+    end
+
+    subgraph Stage_5[Stage 5: Alignment]
         G[AlignmentStage]
         G1[AlignmentBackendFactory]
         G4[AlignmentBackend interface]
@@ -58,7 +62,7 @@ graph TD
         G3[JapaneseAlignmentBackend\ncharacter-level]
     end
 
-    subgraph Stage_5[Stage 5: Post-Processing]
+    subgraph Stage_6[Stage 6: Post-Processing]
         H[PostProcessingStage]
         H0[GranularityAwareProcessorFactory]
         H1[WordBoundaryProcessor\nword-level]
@@ -68,7 +72,7 @@ graph TD
 
     subgraph Output
         I[ProjectFileWriter]
-        J[SubtitleExporter]
+        J[SubtitleExporterFactory]
         J1[SRTExporter]
         J2[WebVTTExporter]
         K[SubtitleExporter interface]
@@ -92,7 +96,7 @@ graph TD
     F4 -.->|Windows/Linux| F2
     F4 -.->|macOS| F3
 
-    F --> G
+    F --> HF --> G
 
     G --> G1
     G1 --> G4
@@ -117,6 +121,7 @@ graph TD
 ```
 
 > 實線箭頭代表資料流向；虛線箭頭代表介面與實作的對應關係（依賴倒置）。
+> Stage 1–2（VAD、Chunking）、Stage 4（HallucinationFilter）、Stage 5（Alignment）為選配；cli.py 依 YAML 設定決定是否加入 Orchestrator。
 
 ---
 
@@ -132,15 +137,16 @@ graph TD
 
 ### 3.2 Stage 層
 
-每個 Stage 實作同一個 `PipelineStage` 介面，接收 `PipelineContext` 並回傳更新後的 `PipelineContext`。
+每個 Stage 實作同一個 `PipelineStage` 介面，接收 `PipelineContext` 並回傳更新後的 `PipelineContext`。Stage 的啟用與否由 cli.py 在組裝 Orchestrator 時決定，停用的 Stage 不會加入 stage list。
 
-| Stage | 職責 |
-|-------|------|
-| `VADStage` | 協調多個 VAD Backend，套用 formula 計算合成分數，輸出 `VadSegment` 清單 |
-| `ChunkingStage` | 根據 VAD 結果與 chunking 設定，將 Segment 合併為適合轉錄的 Chunk |
-| `TranscriptionStage` | 逐一對 Chunk 執行轉錄，依 condition 決定使用哪個模型 |
-| `AlignmentStage` | 依語言路由至對應的 `AlignmentBackend`（wav2vec2），細化時間軸並輸出 `AlignmentGranularity` |
-| `PostProcessingStage` | 依 `AlignmentGranularity` 選擇後處理策略；alignment 未啟用時 fallback 至時間基礎處理器 |
+| Stage | 職責 | 選配 |
+|-------|------|------|
+| `VADStage` | 協調多個 VAD Backend，套用 formula 計算合成分數，輸出 `VadSegment` 清單 | 選配 |
+| `ChunkingStage` | 根據 VAD 結果與 chunking 設定，將 Segment 合併為適合轉錄的 Chunk | 選配 |
+| `TranscriptionStage` | 逐一對 Chunk 執行轉錄，依 condition 決定使用哪個模型；每個 Chunk 可產生一或多個 `TranscriptionResult` | 必選 |
+| `HallucinationFilterStage` | 依規則集過濾幻覺性轉錄結果（括號文字、長重複字元、低 logprob 等） | 選配 |
+| `AlignmentStage` | 依語言路由至對應的 `AlignmentBackend`（wav2vec2），細化時間軸並輸出 `AlignmentGranularity` | 選配 |
+| `PostProcessingStage` | 依 `AlignmentGranularity` 選擇後處理策略；alignment 未啟用時 fallback 至時間基礎處理器 | 必選 |
 
 ### 3.3 Backend 介面層（DIP 實現）
 
@@ -160,6 +166,7 @@ AlignmentBackend (interface)           ← 暴露 granularity: AlignmentGranular
 SubtitleExporter (interface)
   ├── SRTExporter
   └── WebVTTExporter
+  （由 SubtitleExporterFactory 依 format_name 建立）
 ```
 
 後端實作由對應的 Factory 在啟動時依平台或語言設定注入，各 Stage 只依賴對應的抽象介面，不知道具體實作。`AlignmentBackend` 另外對外暴露 `granularity` 屬性，供 `PostProcessingStage` 的 `GranularityAwareProcessorFactory` 用來選擇正確的後處理策略。
@@ -169,7 +176,7 @@ SubtitleExporter (interface)
 | 元件 | 職責 |
 |------|------|
 | `ProjectFileWriter` | 將 `ProjectFile` 資料結構序列化為 JSON 並寫入磁碟 |
-| `SubtitleExporter` | 依選用的格式將最終字幕序列輸出為對應格式 |
+| `SubtitleExporterFactory` | 依 `ExportConfig.format` 建立對應的 `SubtitleExporter` 實作 |
 
 ---
 
@@ -200,6 +207,9 @@ SubtitleExporter (interface)
 - [[pipeline-data-models|Pipeline 資料模型]]
 - [[pipeline-module-interfaces|模組介面設計]]
 - [[pipeline-directory-structure|目錄結構]]
+- [[pipeline-post-processing-processors|後處理 Processor 家族]]
 - [[ADR-0001-跨平台轉錄後端]]
 - [[ADR-0002-condition-評估器]]
 - [[ADR-0003-對齊粒度與後處理策略]]
+
+相關 spec：[[../openspec/specs/pipeline-end-to-end-wiring/spec|pipeline-end-to-end-wiring]]、[[../openspec/specs/pipeline-foundation/spec|pipeline-foundation]]

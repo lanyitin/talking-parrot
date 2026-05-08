@@ -15,10 +15,11 @@ aliases:
 
 | 文件 | 說明 |
 |------|------|
-| [[pipeline-overview\|系統架構總覽]] | Pipeline 整體架構圖、各模組職責、SOLID / 12-Factor 對照 |
-| [[pipeline-data-models\|Pipeline 資料模型]] | ER 圖與所有資料結構定義（VadSegment、TranscriptionResult、ProjectFile 等） |
-| [[pipeline-module-interfaces\|模組介面設計]] | 每個模組的抽象介面與方法簽章（語言無關偽型別） |
+| [[pipeline-overview\|系統架構總覽]] | Pipeline 整體架構圖（6 stages）、各模組職責、SOLID / 12-Factor 對照 |
+| [[pipeline-data-models\|Pipeline 資料模型]] | ER 圖與所有資料結構定義（VadSegment、TranscriptionResult、ProjectFile、HallucinationFilterConfig 等） |
+| [[pipeline-module-interfaces\|模組介面設計]] | 每個模組的抽象介面與方法簽章，含 SplitBoundaryPolicy、SplitTimePolicy、SubtitleExporterFactory |
 | [[pipeline-directory-structure\|目錄結構建議]] | Python 套件組織方式、依賴宣告原則、環境變數清單 |
+| [[pipeline-post-processing-processors\|後處理 Processor 家族]] | 所有 SubtitleProcessor 實作（WORD/CHARACTER/Fallback/Dedup/Japanese）及 Policy 注入設計 |
 
 ## Architecture Decision Records (ADR)
 
