@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Talking Parrot — Debug Timeline</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>
+      <h1>Talking Parrot debug API</h1>
+      <p>
+        This page is the placeholder mount point for the debug-timeline SPA
+        (delivered by a later change). The backend exposes the following
+        JSON endpoints:
+      </p>
+      <ul>
+        <li><code>GET /api/summary</code></li>
+        <li><code>GET /api/waveform?start_ms=&amp;end_ms=&amp;width=</code></li>
+        <li><code>GET /api/vad_probs?start_ms=&amp;end_ms=&amp;downsample=</code></li>
+        <li><code>GET /api/vad_segments?start_ms=&amp;end_ms=</code></li>
+        <li><code>GET /api/subtitles?start_ms=&amp;end_ms=</code></li>
+        <li><code>GET /api/subtitle_tokens?index=</code></li>
+        <li><code>GET /api/audio?start_ms=&amp;end_ms=</code></li>
+        <li><code>GET /api/video_info</code></li>
+        <li><code>GET /api/video</code> (Range-aware)</li>
+        <li><code>GET /api/flagged_regions</code></li>
+        <li><code>POST /api/flagged_regions</code></li>
+      </ul>
+    </noscript>
+  </body>
+</html>

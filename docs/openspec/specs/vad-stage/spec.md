@@ -358,3 +358,82 @@ tests:
   - tests/unit/config/test_models.py
   - tests/unit/transcription/test_backend.py
 -->
+
+---
+### Requirement: VADStage emits tagged per-backend and composite frames into PipelineContext
+
+`VADStage.process` SHALL populate `ctx.vad_frames` with the union of:
+1. Every backend's tagged frames — for each `VADBackend` in `self._backends`, every `RawVadFrame` returned from `analyze(...)` SHALL appear in `ctx.vad_frames` with its `backend` field set to that backend's `name` attribute.
+2. A synthetic composite series — one `RawVadFrame` per unified-timeline frame produced by `_align_frames`, with `time_ms` equal to the unified time point, `prob` equal to the composite score computed by `FormulaEvaluator`, and `backend` equal to the literal string `"composite"`.
+
+The composite frames SHALL be emitted only after composite scores have been computed (Step 3 in the stage pipeline), so every `"composite"` frame's `prob` is the value `FormulaEvaluator.evaluate(...)` returned for the corresponding unified time point.
+
+When the stage is disabled (`ctx.config.vad is None` or `ctx.config.vad.enabled is False`), `ctx.vad_frames` SHALL remain unchanged from the input context (i.e., no frames are emitted).
+
+#### Scenario: stage emits per-backend and composite frames
+
+- **GIVEN** a `VADStage` configured with two backends named `"silero_vad"` and `"ten_vad"` returning two frames each at the same timestamps
+- **WHEN** `process(ctx)` is called with VAD enabled
+- **THEN** the returned context's `vad_frames` MUST contain at least one frame with `backend == "silero_vad"`, at least one with `backend == "ten_vad"`, and at least one with `backend == "composite"`
+- **THEN** every frame's `prob` MUST be in `[0.0, 1.0]`
+
+#### Scenario: stage disabled leaves vad_frames untouched
+
+- **GIVEN** a `PipelineContext` with `ctx.config.vad.enabled == False` and `ctx.vad_frames == []`
+- **WHEN** `process(ctx)` is called
+- **THEN** the returned context's `vad_frames` MUST equal `[]`
+
+##### Example: two backends and composite
+
+- **GIVEN** ten_vad frames `[(0, 0.9), (16, 0.8)]` and silero_vad frames `[(0, 0.85), (16, 0.75)]`, with a composite formula yielding `0.875` at `t=0` and `0.775` at `t=16`
+- **WHEN** `VADStage.process` runs
+- **THEN** `ctx.vad_frames` contains at minimum: `RawVadFrame(0, 0.9, "ten_vad")`, `RawVadFrame(16, 0.8, "ten_vad")`, `RawVadFrame(0, 0.85, "silero_vad")`, `RawVadFrame(16, 0.75, "silero_vad")`, `RawVadFrame(0, 0.875, "composite")`, `RawVadFrame(16, 0.775, "composite")`
+
+<!-- @trace
+source: vad-frames-per-backend
+updated: 2026-05-09
+code:
+  - docs/planning/quality-and-tooling/adr-0002-mcp-streamable-http-default.md
+  - docs/planning/quality-and-tooling/README.md
+  - src/talking_parrot/cli.py
+  - src/talking_parrot/models/context.py
+  - tests/unit/gui/__init__.py
+  - docs/planning/quality-and-tooling/01-regression-harness.md
+  - src/talking_parrot/gui/__init__.py
+  - docs/planning/quality-and-tooling/shared-architecture.md
+  - src/talking_parrot/gui/static/index.html
+  - src/talking_parrot/gui/cli.py
+  - src/talking_parrot/shared/snapshot_loader.py
+  - docs/planning/quality-and-tooling/adr-0001-gui-browser-spa.md
+  - src/talking_parrot/stages/vad_stage.py
+  - src/talking_parrot/gui/api.py
+  - tests/unit/shared/__init__.py
+  - docs/TODOs.md
+  - tests/unit/gui/conftest.py
+  - src/talking_parrot/gui/http_server.py
+  - src/talking_parrot/vad/ten_vad.py
+  - src/talking_parrot/vad/silero_vad.py
+  - docs/planning/quality-and-tooling/03-mcp-server.md
+  - docs/planning/quality-and-tooling/02-analysis-gui.md
+  - src/talking_parrot/models/vad.py
+  - src/talking_parrot/shared/project_snapshot.py
+  - src/talking_parrot/shared/metrics.py
+  - src/talking_parrot/models/project_file.py
+  - src/talking_parrot/shared/__init__.py
+tests:
+  - tests/unit/gui/test_cli.py
+  - tests/unit/gui/test_design_alignment.py
+  - tests/unit/shared/test_snapshot_loader.py
+  - tests/unit/gui/test_http_server_imports.py
+  - tests/unit/vad/test_raw_vad_frame_backend.py
+  - tests/unit/shared/test_project_snapshot.py
+  - tests/unit/io/test_project_writer.py
+  - tests/unit/gui/test_http_server.py
+  - tests/unit/gui/test_api.py
+  - tests/unit/models/test_data_models.py
+  - tests/unit/stages/test_vad_stage.py
+  - tests/unit/vad/test_backend.py
+  - tests/unit/shared/test_metrics.py
+  - tests/unit/gui/test_dependency_direction.py
+  - tests/unit/shared/test_public_api.py
+-->

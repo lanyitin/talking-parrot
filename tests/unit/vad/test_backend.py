@@ -22,7 +22,7 @@ class TestVADBackendAbstract:
                 return "test_backend"
 
             def analyze(self, audio_data: bytes, sample_rate: int) -> list[RawVadFrame]:
-                return [RawVadFrame(time_ms=0, prob=0.5)]
+                return [RawVadFrame(time_ms=0, prob=0.5, backend="test_backend")]
 
         backend = ConcreteBackend()
         assert backend.name == "test_backend"
@@ -45,21 +45,21 @@ class TestVADBackendAbstract:
 class TestRawVadFrameImmutability:
     def test_raw_vad_frame_is_frozen(self):
         """RawVadFrame is frozen — field assignment raises FrozenInstanceError."""
-        frame = RawVadFrame(time_ms=0, prob=0.5)
+        frame = RawVadFrame(time_ms=0, prob=0.5, backend="silero_vad")
         with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
             frame.time_ms = 10  # type: ignore
 
     def test_raw_vad_frame_prob_zero_is_valid(self):
         """prob=0.0 is within the valid range [0.0, 1.0]."""
-        frame = RawVadFrame(time_ms=0, prob=0.0)
+        frame = RawVadFrame(time_ms=0, prob=0.0, backend="silero_vad")
         assert frame.prob == 0.0
 
     def test_raw_vad_frame_prob_one_is_valid(self):
         """prob=1.0 is within the valid range [0.0, 1.0]."""
-        frame = RawVadFrame(time_ms=160, prob=1.0)
+        frame = RawVadFrame(time_ms=160, prob=1.0, backend="silero_vad")
         assert frame.prob == 1.0
 
     def test_raw_vad_frame_prob_mid_range_is_valid(self):
         """prob=0.95 is within the valid range [0.0, 1.0]."""
-        frame = RawVadFrame(time_ms=320, prob=0.95)
+        frame = RawVadFrame(time_ms=320, prob=0.95, backend="silero_vad")
         assert frame.prob == 0.95

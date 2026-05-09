@@ -3,10 +3,25 @@ from pathlib import Path
 
 import pytest
 
+from talking_parrot.config.models import PipelineConfig
+from talking_parrot.models.context import PipelineContext
 from talking_parrot.models.media import MediaInfo
 from talking_parrot.models.vad import RawVadFrame, VadSegment
 from talking_parrot.models.chunk import Chunk
 from talking_parrot.models.subtitle import Subtitle
+
+
+def test_pipeline_context_vad_frames_default_empty() -> None:
+    """``PipelineContext.vad_frames`` defaults to an empty list."""
+    ctx = PipelineContext(
+        config=PipelineConfig(
+            transcribing=[{"condition": "true", "backend": "faster-whisper"}],
+        ),
+        media_info=MediaInfo(
+            path=Path("/tmp/test.wav"), duration_ms=1000, sha256="abc"
+        ),
+    )
+    assert ctx.vad_frames == []
 
 
 class TestChunkFields:
@@ -75,22 +90,23 @@ class TestVadSegment:
 
 class TestRawVadFrame:
     def test_raw_vad_frame_construction(self):
-        """RawVadFrame can be constructed with valid time_ms and prob."""
-        frame = RawVadFrame(time_ms=0, prob=0.0)
+        """RawVadFrame can be constructed with valid time_ms, prob, and backend."""
+        frame = RawVadFrame(time_ms=0, prob=0.0, backend="silero_vad")
         assert frame.time_ms == 0
         assert frame.prob == 0.0
+        assert frame.backend == "silero_vad"
 
-        frame2 = RawVadFrame(time_ms=160, prob=0.95)
+        frame2 = RawVadFrame(time_ms=160, prob=0.95, backend="ten_vad")
         assert frame2.time_ms == 160
         assert frame2.prob == 0.95
 
-        frame3 = RawVadFrame(time_ms=320, prob=1.0)
+        frame3 = RawVadFrame(time_ms=320, prob=1.0, backend="composite")
         assert frame3.time_ms == 320
         assert frame3.prob == 1.0
 
     def test_raw_vad_frame_is_frozen(self):
         """RawVadFrame cannot be mutated after construction."""
-        frame = RawVadFrame(time_ms=0, prob=0.5)
+        frame = RawVadFrame(time_ms=0, prob=0.5, backend="silero_vad")
         with pytest.raises((dataclasses.FrozenInstanceError, AttributeError)):
             frame.prob = 0.9  # type: ignore
 

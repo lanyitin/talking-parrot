@@ -8,129 +8,61 @@ TBD - created by archiving change 'bootstrap-pipeline-foundation'. Update Purpos
 
 ### Requirement: PipelineContext fields
 
-The system SHALL provide a frozen dataclass `PipelineContext` containing the following fields: `config: PipelineConfig`, `media_info: MediaInfo`, `vad_segments: list[VadSegment]`, `chunks: list[Chunk]`, `transcription_results: list[TranscriptionResult]`, `alignment_status: AlignmentStatus`, `alignment_granularity: AlignmentGranularity | None`, `alignment_results: list[AlignmentResult]`, `subtitles: list[Subtitle]`. Default factory values MUST initialise list fields as empty lists, `alignment_status` as `AlignmentStatus.DISABLED`, and `alignment_granularity` as `None`.
+The system SHALL provide a frozen dataclass `PipelineContext` containing the following fields: `config: PipelineConfig`, `media_info: MediaInfo`, `vad_frames: list[RawVadFrame]`, `vad_segments: list[VadSegment]`, `chunks: list[Chunk]`, `transcription_results: list[TranscriptionResult]`, `alignment_status: AlignmentStatus`, `alignment_granularity: AlignmentGranularity | None`, `alignment_results: list[AlignmentResult]`, `subtitles: list[Subtitle]`. Default factory values MUST initialise list fields as empty lists, `alignment_status` as `AlignmentStatus.DISABLED`, and `alignment_granularity` as `None`.
 
 #### Scenario: Default initialization
 
 - **WHEN** `PipelineContext(config=cfg, media_info=info)` is constructed without other arguments
-- **THEN** `vad_segments`, `chunks`, `transcription_results`, `alignment_results`, and `subtitles` MUST each be empty lists, `alignment_status` MUST equal `AlignmentStatus.DISABLED`, and `alignment_granularity` MUST be `None`
+- **THEN** `vad_frames`, `vad_segments`, `chunks`, `transcription_results`, `alignment_results`, and `subtitles` MUST each be empty lists, `alignment_status` MUST equal `AlignmentStatus.DISABLED`, and `alignment_granularity` MUST be `None`
 
 
 <!-- @trace
-source: bootstrap-pipeline-foundation
-updated: 2026-05-01
+source: vad-frames-per-backend
+updated: 2026-05-09
 code:
-  - .python-version
-  - .spectra.yaml
-  - src/talking_parrot/models/__pycache__/media.cpython-313.pyc
-  - src/talking_parrot/models/vad.py
-  - mise.toml
-  - fnox.toml
-  - src/talking_parrot/logging_config.py
-  - tests/unit/config/__init__.py
-  - src/talking_parrot/models/context.py
-  - tests/unit/models/__init__.py
-  - tests/__init__.py
-  - src/talking_parrot/expression/__pycache__/__init__.cpython-313.pyc
-  - uv.lock
-  - pyproject.toml
-  - src/talking_parrot/models/subtitle.py
-  - tests/unit/io/__pycache__/__init__.cpython-313.pyc
+  - docs/planning/quality-and-tooling/adr-0002-mcp-streamable-http-default.md
+  - docs/planning/quality-and-tooling/README.md
   - src/talking_parrot/cli.py
-  - tests/unit/__init__.py
-  - src/talking_parrot/models/__pycache__/vad.cpython-313.pyc
-  - tests/unit/io/__init__.py
-  - src/talking_parrot/io/__pycache__/audio_decoder.cpython-313.pyc
-  - src/talking_parrot/pipeline/orchestrator.py
-  - src/talking_parrot/config/models.py
-  - src/talking_parrot/__pycache__/cli.cpython-313.pyc
-  - src/talking_parrot/expression/__pycache__/formula.cpython-313.pyc
-  - src/talking_parrot/expression/__init__.py
-  - src/talking_parrot/models/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/stages/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/pipeline/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/__pycache__/logging_config.cpython-313.pyc
-  - src/talking_parrot/pipeline/__pycache__/orchestrator.cpython-313.pyc
-  - src/talking_parrot/models/__pycache__/subtitle.cpython-313.pyc
-  - tests/unit/pipeline/__init__.py
-  - tests/unit/pipeline/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/io/__pycache__/media_hasher.cpython-313.pyc
-  - src/talking_parrot/io/__init__.py
+  - src/talking_parrot/models/context.py
+  - tests/unit/gui/__init__.py
+  - docs/planning/quality-and-tooling/01-regression-harness.md
+  - src/talking_parrot/gui/__init__.py
+  - docs/planning/quality-and-tooling/shared-architecture.md
+  - src/talking_parrot/gui/static/index.html
+  - src/talking_parrot/gui/cli.py
+  - src/talking_parrot/shared/snapshot_loader.py
+  - docs/planning/quality-and-tooling/adr-0001-gui-browser-spa.md
+  - src/talking_parrot/stages/vad_stage.py
+  - src/talking_parrot/gui/api.py
+  - tests/unit/shared/__init__.py
+  - docs/TODOs.md
+  - tests/unit/gui/conftest.py
+  - src/talking_parrot/gui/http_server.py
+  - src/talking_parrot/vad/ten_vad.py
+  - src/talking_parrot/vad/silero_vad.py
+  - docs/planning/quality-and-tooling/03-mcp-server.md
+  - docs/planning/quality-and-tooling/02-analysis-gui.md
+  - src/talking_parrot/models/vad.py
+  - src/talking_parrot/shared/project_snapshot.py
+  - src/talking_parrot/shared/metrics.py
   - src/talking_parrot/models/project_file.py
-  - src/talking_parrot/models/__init__.py
-  - src/talking_parrot/io/__pycache__/project_writer.cpython-313.pyc
-  - tests/unit/stages/__pycache__/__init__.cpython-313.pyc
-  - tests/integration/__init__.py
-  - src/talking_parrot/expression/__pycache__/condition.cpython-313.pyc
-  - src/talking_parrot/io/__pycache__/audio_reader.cpython-313.pyc
-  - src/talking_parrot/io/media_hasher.py
-  - src/talking_parrot/config/__init__.py
-  - src/talking_parrot/models/__pycache__/context.cpython-313.pyc
-  - src/talking_parrot/models/transcription.py
-  - src/talking_parrot/expression/base.py
-  - src/talking_parrot/models/__pycache__/project_file.cpython-313.pyc
-  - src/talking_parrot/io/audio_decoder.py
-  - tests/unit/__pycache__/__init__.cpython-313.pyc
-  - tests/unit/expression/__init__.py
-  - tests/unit/models/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/__init__.py
-  - src/talking_parrot/io/project_writer.py
-  - src/talking_parrot/models/media.py
-  - CLAUDE.md
-  - src/talking_parrot/models/__pycache__/chunk.cpython-313.pyc
-  - src/talking_parrot/models/__pycache__/transcription.cpython-313.pyc
-  - src/talking_parrot/expression/condition.py
-  - src/talking_parrot/expression/formula.py
-  - src/talking_parrot/stages/base.py
-  - src/talking_parrot/io/audio_reader.py
-  - src/talking_parrot/config/__pycache__/models.cpython-313.pyc
-  - tests/integration/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/expression/__pycache__/base.cpython-313.pyc
-  - tests/unit/expression/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/config/loader.py
-  - src/talking_parrot/stages/__pycache__/base.cpython-313.pyc
-  - src/talking_parrot/config/__pycache__/__init__.cpython-313.pyc
-  - tests/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/pipeline/__init__.py
-  - src/talking_parrot/io/__pycache__/__init__.cpython-313.pyc
-  - README.md
-  - src/talking_parrot/stages/__init__.py
-  - tests/unit/stages/__init__.py
-  - src/talking_parrot/models/chunk.py
-  - tests/unit/config/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/config/__pycache__/loader.cpython-313.pyc
-  - src/talking_parrot/__pycache__/__init__.cpython-313.pyc
+  - src/talking_parrot/shared/__init__.py
 tests:
-  - tests/unit/models/test_project_file.py
-  - tests/unit/config/__pycache__/test_models.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/config/__pycache__/test_loader_warning.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/io/test_audio_reader.py
-  - tests/unit/config/test_models.py
-  - tests/unit/io/__pycache__/test_media_hasher.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/expression/__pycache__/test_base.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/models/__pycache__/test_context.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/expression/test_base.py
-  - tests/unit/io/__pycache__/test_audio_reader.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/models/test_data_models.py
-  - tests/unit/pipeline/test_orchestrator.py
-  - tests/integration/__pycache__/test_pipeline_smoke.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/models/__pycache__/test_transcription.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/models/test_transcription.py
-  - tests/unit/test_logging_config.py
+  - tests/unit/gui/test_cli.py
+  - tests/unit/gui/test_design_alignment.py
+  - tests/unit/shared/test_snapshot_loader.py
+  - tests/unit/gui/test_http_server_imports.py
+  - tests/unit/vad/test_raw_vad_frame_backend.py
+  - tests/unit/shared/test_project_snapshot.py
   - tests/unit/io/test_project_writer.py
-  - tests/unit/__pycache__/test_logging_config.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/io/__pycache__/test_project_writer.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/stages/__pycache__/test_base.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/config/test_loader.py
-  - tests/unit/models/test_context.py
-  - tests/unit/models/__pycache__/test_project_file.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/config/__pycache__/test_loader.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/stages/test_base.py
-  - tests/unit/models/__pycache__/test_data_models.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/io/test_media_hasher.py
-  - tests/unit/config/test_loader_warning.py
-  - tests/integration/test_pipeline_smoke.py
-  - tests/unit/pipeline/__pycache__/test_orchestrator.cpython-313-pytest-9.0.3.pyc
+  - tests/unit/gui/test_http_server.py
+  - tests/unit/gui/test_api.py
+  - tests/unit/models/test_data_models.py
+  - tests/unit/stages/test_vad_stage.py
+  - tests/unit/vad/test_backend.py
+  - tests/unit/shared/test_metrics.py
+  - tests/unit/gui/test_dependency_direction.py
+  - tests/unit/shared/test_public_api.py
 -->
 
 ---
@@ -583,126 +515,63 @@ tests:
 ---
 ### Requirement: ProjectFile is pure data
 
-The `ProjectFile` dataclass SHALL contain only fields (`version: str`, `created_at: str`, `media`, `config`, `vad_segments`, `transcription_results`, `subtitles`) and no methods beyond those auto-generated by `@dataclass`. Serialization MUST be performed exclusively by `ProjectFileWriter` (see `audio-io`).
+The `ProjectFile` dataclass SHALL contain only fields (`version: str`, `created_at: str`, `media`, `config`, `vad_frames`, `vad_segments`, `transcription_results`, `subtitles`) and no methods beyond those auto-generated by `@dataclass`. Serialization MUST be performed exclusively by `ProjectFileWriter` (see `audio-io`). The `vad_frames` field SHALL default to an empty list and items MUST round-trip through `dataclasses.asdict` as plain dicts.
 
 #### Scenario: ProjectFile has no behavior
 
 - **WHEN** the `ProjectFile` class definition is reviewed
 - **THEN** it MUST NOT define `to_json`, `save`, `write`, or any method beyond dataclass-generated `__init__`, `__repr__`, `__eq__`
 
+#### Scenario: ProjectFile.vad_frames defaults to empty list
+
+- **WHEN** `ProjectFile(version="1", created_at="2026-05-09T00:00:00Z", media=m, config={})` is constructed without supplying `vad_frames`
+- **THEN** `ProjectFile.vad_frames` MUST equal `[]`
+
 <!-- @trace
-source: bootstrap-pipeline-foundation
-updated: 2026-05-01
+source: vad-frames-per-backend
+updated: 2026-05-09
 code:
-  - .python-version
-  - .spectra.yaml
-  - src/talking_parrot/models/__pycache__/media.cpython-313.pyc
-  - src/talking_parrot/models/vad.py
-  - mise.toml
-  - fnox.toml
-  - src/talking_parrot/logging_config.py
-  - tests/unit/config/__init__.py
-  - src/talking_parrot/models/context.py
-  - tests/unit/models/__init__.py
-  - tests/__init__.py
-  - src/talking_parrot/expression/__pycache__/__init__.cpython-313.pyc
-  - uv.lock
-  - pyproject.toml
-  - src/talking_parrot/models/subtitle.py
-  - tests/unit/io/__pycache__/__init__.cpython-313.pyc
+  - docs/planning/quality-and-tooling/adr-0002-mcp-streamable-http-default.md
+  - docs/planning/quality-and-tooling/README.md
   - src/talking_parrot/cli.py
-  - tests/unit/__init__.py
-  - src/talking_parrot/models/__pycache__/vad.cpython-313.pyc
-  - tests/unit/io/__init__.py
-  - src/talking_parrot/io/__pycache__/audio_decoder.cpython-313.pyc
-  - src/talking_parrot/pipeline/orchestrator.py
-  - src/talking_parrot/config/models.py
-  - src/talking_parrot/__pycache__/cli.cpython-313.pyc
-  - src/talking_parrot/expression/__pycache__/formula.cpython-313.pyc
-  - src/talking_parrot/expression/__init__.py
-  - src/talking_parrot/models/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/stages/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/pipeline/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/__pycache__/logging_config.cpython-313.pyc
-  - src/talking_parrot/pipeline/__pycache__/orchestrator.cpython-313.pyc
-  - src/talking_parrot/models/__pycache__/subtitle.cpython-313.pyc
-  - tests/unit/pipeline/__init__.py
-  - tests/unit/pipeline/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/io/__pycache__/media_hasher.cpython-313.pyc
-  - src/talking_parrot/io/__init__.py
+  - src/talking_parrot/models/context.py
+  - tests/unit/gui/__init__.py
+  - docs/planning/quality-and-tooling/01-regression-harness.md
+  - src/talking_parrot/gui/__init__.py
+  - docs/planning/quality-and-tooling/shared-architecture.md
+  - src/talking_parrot/gui/static/index.html
+  - src/talking_parrot/gui/cli.py
+  - src/talking_parrot/shared/snapshot_loader.py
+  - docs/planning/quality-and-tooling/adr-0001-gui-browser-spa.md
+  - src/talking_parrot/stages/vad_stage.py
+  - src/talking_parrot/gui/api.py
+  - tests/unit/shared/__init__.py
+  - docs/TODOs.md
+  - tests/unit/gui/conftest.py
+  - src/talking_parrot/gui/http_server.py
+  - src/talking_parrot/vad/ten_vad.py
+  - src/talking_parrot/vad/silero_vad.py
+  - docs/planning/quality-and-tooling/03-mcp-server.md
+  - docs/planning/quality-and-tooling/02-analysis-gui.md
+  - src/talking_parrot/models/vad.py
+  - src/talking_parrot/shared/project_snapshot.py
+  - src/talking_parrot/shared/metrics.py
   - src/talking_parrot/models/project_file.py
-  - src/talking_parrot/models/__init__.py
-  - src/talking_parrot/io/__pycache__/project_writer.cpython-313.pyc
-  - tests/unit/stages/__pycache__/__init__.cpython-313.pyc
-  - tests/integration/__init__.py
-  - src/talking_parrot/expression/__pycache__/condition.cpython-313.pyc
-  - src/talking_parrot/io/__pycache__/audio_reader.cpython-313.pyc
-  - src/talking_parrot/io/media_hasher.py
-  - src/talking_parrot/config/__init__.py
-  - src/talking_parrot/models/__pycache__/context.cpython-313.pyc
-  - src/talking_parrot/models/transcription.py
-  - src/talking_parrot/expression/base.py
-  - src/talking_parrot/models/__pycache__/project_file.cpython-313.pyc
-  - src/talking_parrot/io/audio_decoder.py
-  - tests/unit/__pycache__/__init__.cpython-313.pyc
-  - tests/unit/expression/__init__.py
-  - tests/unit/models/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/__init__.py
-  - src/talking_parrot/io/project_writer.py
-  - src/talking_parrot/models/media.py
-  - CLAUDE.md
-  - src/talking_parrot/models/__pycache__/chunk.cpython-313.pyc
-  - src/talking_parrot/models/__pycache__/transcription.cpython-313.pyc
-  - src/talking_parrot/expression/condition.py
-  - src/talking_parrot/expression/formula.py
-  - src/talking_parrot/stages/base.py
-  - src/talking_parrot/io/audio_reader.py
-  - src/talking_parrot/config/__pycache__/models.cpython-313.pyc
-  - tests/integration/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/expression/__pycache__/base.cpython-313.pyc
-  - tests/unit/expression/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/config/loader.py
-  - src/talking_parrot/stages/__pycache__/base.cpython-313.pyc
-  - src/talking_parrot/config/__pycache__/__init__.cpython-313.pyc
-  - tests/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/pipeline/__init__.py
-  - src/talking_parrot/io/__pycache__/__init__.cpython-313.pyc
-  - README.md
-  - src/talking_parrot/stages/__init__.py
-  - tests/unit/stages/__init__.py
-  - src/talking_parrot/models/chunk.py
-  - tests/unit/config/__pycache__/__init__.cpython-313.pyc
-  - src/talking_parrot/config/__pycache__/loader.cpython-313.pyc
-  - src/talking_parrot/__pycache__/__init__.cpython-313.pyc
+  - src/talking_parrot/shared/__init__.py
 tests:
-  - tests/unit/models/test_project_file.py
-  - tests/unit/config/__pycache__/test_models.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/config/__pycache__/test_loader_warning.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/io/test_audio_reader.py
-  - tests/unit/config/test_models.py
-  - tests/unit/io/__pycache__/test_media_hasher.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/expression/__pycache__/test_base.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/models/__pycache__/test_context.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/expression/test_base.py
-  - tests/unit/io/__pycache__/test_audio_reader.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/models/test_data_models.py
-  - tests/unit/pipeline/test_orchestrator.py
-  - tests/integration/__pycache__/test_pipeline_smoke.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/models/__pycache__/test_transcription.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/models/test_transcription.py
-  - tests/unit/test_logging_config.py
+  - tests/unit/gui/test_cli.py
+  - tests/unit/gui/test_design_alignment.py
+  - tests/unit/shared/test_snapshot_loader.py
+  - tests/unit/gui/test_http_server_imports.py
+  - tests/unit/vad/test_raw_vad_frame_backend.py
+  - tests/unit/shared/test_project_snapshot.py
   - tests/unit/io/test_project_writer.py
-  - tests/unit/__pycache__/test_logging_config.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/io/__pycache__/test_project_writer.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/stages/__pycache__/test_base.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/config/test_loader.py
-  - tests/unit/models/test_context.py
-  - tests/unit/models/__pycache__/test_project_file.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/config/__pycache__/test_loader.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/stages/test_base.py
-  - tests/unit/models/__pycache__/test_data_models.cpython-313-pytest-9.0.3.pyc
-  - tests/unit/io/test_media_hasher.py
-  - tests/unit/config/test_loader_warning.py
-  - tests/integration/test_pipeline_smoke.py
-  - tests/unit/pipeline/__pycache__/test_orchestrator.cpython-313-pytest-9.0.3.pyc
+  - tests/unit/gui/test_http_server.py
+  - tests/unit/gui/test_api.py
+  - tests/unit/models/test_data_models.py
+  - tests/unit/stages/test_vad_stage.py
+  - tests/unit/vad/test_backend.py
+  - tests/unit/shared/test_metrics.py
+  - tests/unit/gui/test_dependency_direction.py
+  - tests/unit/shared/test_public_api.py
 -->

@@ -34,8 +34,16 @@ class AlignmentResult:
 
 @dataclass(frozen=True)
 class PipelineContext:
+    """Frozen pipeline context threaded through every stage.
+
+    The ``vad_frames`` field carries tagged per-backend frames plus a
+    synthetic ``"composite"`` series produced by ``VADStage``. See the
+    ``pipeline-data-models`` capability spec for the full contract.
+    """
+
     config: "PipelineConfig"
     media_info: "MediaInfo"
+    vad_frames: list = field(default_factory=list)
     vad_segments: list = field(default_factory=list)
     chunks: list = field(default_factory=list)
     transcription_results: list = field(default_factory=list)

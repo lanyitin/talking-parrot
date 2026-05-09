@@ -243,6 +243,7 @@ def main() -> None:
             "duration_ms": media_info.duration_ms,
         },
         config=cfg.model_dump(),
+        vad_frames=ctx.vad_frames,
         vad_segments=ctx.vad_segments,
         transcription_results=ctx.transcription_results,
         subtitles=ctx.subtitles,

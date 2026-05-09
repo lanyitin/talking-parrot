@@ -157,6 +157,8 @@ class SileroVADBackend(VADBackend):
             )
 
             time_ms = round(i * chunk_size / sample_rate * 1000)
-            frames.append(RawVadFrame(time_ms=time_ms, prob=probability))
+            frames.append(
+                RawVadFrame(time_ms=time_ms, prob=probability, backend=self.name)
+            )
 
         return frames

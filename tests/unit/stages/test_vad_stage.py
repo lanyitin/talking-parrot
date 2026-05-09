@@ -133,13 +133,13 @@ class TestVADStageFrameAlignment:
     def test_unified_timeline_contains_all_backend_time_points(self) -> None:
         """Unified timeline contains time points from both backends."""
         ten_frames = [
-            RawVadFrame(time_ms=0, prob=0.9),
-            RawVadFrame(time_ms=16, prob=0.8),
-            RawVadFrame(time_ms=32, prob=0.7),
+            RawVadFrame(time_ms=0, prob=0.9, backend="ten_vad"),
+            RawVadFrame(time_ms=16, prob=0.8, backend="ten_vad"),
+            RawVadFrame(time_ms=32, prob=0.7, backend="ten_vad"),
         ]
         silero_frames = [
-            RawVadFrame(time_ms=0, prob=0.85),
-            RawVadFrame(time_ms=32, prob=0.75),
+            RawVadFrame(time_ms=0, prob=0.85, backend="silero_vad"),
+            RawVadFrame(time_ms=32, prob=0.75, backend="silero_vad"),
         ]
         ten_backend = _MockBackend("ten_vad", ten_frames)
         silero_backend = _MockBackend("silero_vad", silero_frames)
@@ -176,13 +176,13 @@ class TestVADStageFrameAlignment:
           At time_ms=16: ten_vad_prob=0.8, silero_vad_prob=0.85
         """
         ten_frames = [
-            RawVadFrame(time_ms=0, prob=0.9),
-            RawVadFrame(time_ms=16, prob=0.8),
-            RawVadFrame(time_ms=32, prob=0.7),
+            RawVadFrame(time_ms=0, prob=0.9, backend="ten_vad"),
+            RawVadFrame(time_ms=16, prob=0.8, backend="ten_vad"),
+            RawVadFrame(time_ms=32, prob=0.7, backend="ten_vad"),
         ]
         silero_frames = [
-            RawVadFrame(time_ms=0, prob=0.85),
-            RawVadFrame(time_ms=32, prob=0.75),
+            RawVadFrame(time_ms=0, prob=0.85, backend="silero_vad"),
+            RawVadFrame(time_ms=32, prob=0.75, backend="silero_vad"),
         ]
         ten_backend = _MockBackend("ten_vad", ten_frames)
         silero_backend = _MockBackend("silero_vad", silero_frames)
@@ -389,3 +389,77 @@ class TestVADStageSegmentStatistics:
         assert segment.ten_vad_prob == pytest.approx(0.85)
         assert segment.silero_vad_prob == pytest.approx(0.65)
         assert segment.composite_score == pytest.approx(0.80)
+
+
+# ---------------------------------------------------------------------------
+# vad-frames-per-backend — emit tagged per-backend and composite frames
+# ---------------------------------------------------------------------------
+
+
+def test_vad_stage_emits_per_backend_and_composite_frames() -> None:
+    """``VADStage.process`` writes tagged per-backend + composite frames into ctx.
+
+    Spec scenario: ten_vad frames ``[(0, 0.9), (16, 0.8)]`` and silero_vad
+    frames ``[(0, 0.85), (16, 0.75)]`` with formula
+    ``(ten_vad_prob + silero_vad_prob) / 2`` SHALL produce per-backend
+    frames plus composite frames at every unified time point.
+    """
+    ten_frames = [
+        RawVadFrame(time_ms=0, prob=0.9, backend="ten_vad"),
+        RawVadFrame(time_ms=16, prob=0.8, backend="ten_vad"),
+    ]
+    silero_frames = [
+        RawVadFrame(time_ms=0, prob=0.85, backend="silero_vad"),
+        RawVadFrame(time_ms=16, prob=0.75, backend="silero_vad"),
+    ]
+    ten_backend = _MockBackend("ten_vad", ten_frames)
+    silero_backend = _MockBackend("silero_vad", silero_frames)
+
+    vad_cfg = VadConfig(
+        enabled=True,
+        activity_threshold=0.0,
+        neg_threshold=-1.0,
+        formula="(ten_vad_prob + silero_vad_prob) / 2",
+        min_speech_duration_ms=0,
+        max_speech_duration_ms=999999,
+        min_silence_duration_ms=999999,
+        speech_pad_ms=0,
+    )
+    stage = VADStage(
+        backends=[ten_backend, silero_backend],
+        formula_evaluator=FormulaEvaluator(),
+        audio_reader=_StubAudioReader(),
+    )
+    ctx = _make_ctx(vad=vad_cfg, duration_ms=100)
+    result = stage.process(ctx)
+
+    by_backend: dict[str, list[RawVadFrame]] = {}
+    for frame in result.vad_frames:
+        by_backend.setdefault(frame.backend, []).append(frame)
+
+    assert "ten_vad" in by_backend
+    assert "silero_vad" in by_backend
+    assert "composite" in by_backend
+    # Every per-backend frame in the input is preserved in the output.
+    ten_pairs = {(f.time_ms, f.prob) for f in by_backend["ten_vad"]}
+    silero_pairs = {(f.time_ms, f.prob) for f in by_backend["silero_vad"]}
+    assert (0, 0.9) in ten_pairs
+    assert (16, 0.8) in ten_pairs
+    assert (0, 0.85) in silero_pairs
+    assert (16, 0.75) in silero_pairs
+    # Composite frames have a frame per unified time point with the formula
+    # value (mean here): 0.875 at t=0, 0.775 at t=16.
+    composite_by_t = {f.time_ms: f.prob for f in by_backend["composite"]}
+    assert composite_by_t[0] == pytest.approx(0.875)
+    assert composite_by_t[16] == pytest.approx(0.775)
+    for frame in result.vad_frames:
+        assert 0.0 <= frame.prob <= 1.0
+
+
+def test_vad_stage_disabled_leaves_vad_frames_untouched() -> None:
+    """Disabled stage MUST NOT modify ``ctx.vad_frames``."""
+    stage = _make_stage()
+    ctx = _make_ctx(vad=VadConfig(enabled=False))
+    result = stage.process(ctx)
+    assert result.vad_frames == []
+    assert result.vad_frames == ctx.vad_frames

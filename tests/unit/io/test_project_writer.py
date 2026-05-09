@@ -41,3 +41,27 @@ class TestProjectFileWriter:
         ProjectFileWriter.write(pf, str(out))
         data = json.loads(out.read_text())
         assert data["created_at"] == "2026-05-01T12:00:00Z"
+
+    def test_project_file_vad_frames_round_trip(self, tmp_path):
+        """``vad_frames`` items round-trip through writer with ``backend`` tag."""
+        from talking_parrot.models.vad import RawVadFrame
+
+        pf = _make_project_file(
+            vad_frames=[
+                RawVadFrame(time_ms=0, prob=0.9, backend="silero_vad"),
+                RawVadFrame(time_ms=16, prob=0.85, backend="ten_vad"),
+                RawVadFrame(time_ms=32, prob=0.875, backend="composite"),
+            ]
+        )
+        out = tmp_path / "out.json"
+        ProjectFileWriter.write(pf, str(out))
+        data = json.loads(out.read_text())
+        assert "vad_frames" in data
+        assert len(data["vad_frames"]) == 3
+        assert data["vad_frames"][0] == {
+            "time_ms": 0,
+            "prob": 0.9,
+            "backend": "silero_vad",
+        }
+        assert data["vad_frames"][1]["backend"] == "ten_vad"
+        assert data["vad_frames"][2]["backend"] == "composite"

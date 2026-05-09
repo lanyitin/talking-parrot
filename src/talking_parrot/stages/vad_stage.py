@@ -25,11 +25,13 @@ import structlog
 
 from talking_parrot.stages.base import PipelineStage
 
+from talking_parrot.models.vad import RawVadFrame
+
 if TYPE_CHECKING:
     from talking_parrot.expression.formula import FormulaEvaluator
     from talking_parrot.io.audio_reader import AudioReader
     from talking_parrot.models.context import PipelineContext
-    from talking_parrot.models.vad import RawVadFrame, VadSegment
+    from talking_parrot.models.vad import VadSegment
     from talking_parrot.vad.backend import VADBackend
 
 logger = structlog.get_logger(__name__)
@@ -117,15 +119,29 @@ class VADStage(PipelineStage):
             )
             backend_frames[backend.name] = frames
 
+        # Build the tagged per-backend frame list now (frames already carry
+        # their backend tag from each ``VADBackend.analyze``). This is the
+        # foundation of ``ctx.vad_frames`` regardless of how alignment turns
+        # out below.
+        tagged_frames: list["RawVadFrame"] = []
+        for name, frames in backend_frames.items():
+            for frame in frames:
+                # Every real backend tags its own frames; defensively replace
+                # any mistagged frame with one carrying the configured name.
+                if frame.backend == name:
+                    tagged_frames.append(frame)
+                else:
+                    tagged_frames.append(dataclasses.replace(frame, backend=name))
+
         if not any(backend_frames.values()):
-            # No frames at all — return empty segments
-            return dataclasses.replace(ctx, vad_segments=[])
+            # No frames at all — return empty segments and empty vad_frames.
+            return dataclasses.replace(ctx, vad_segments=[], vad_frames=[])
 
         # Step 2: align frames onto a unified timeline
         aligned = self._align_frames(backend_frames)
 
         if not aligned:
-            return dataclasses.replace(ctx, vad_segments=[])
+            return dataclasses.replace(ctx, vad_segments=[], vad_frames=tagged_frames)
 
         # Step 3: compute composite score per unified frame
         backend_names = [b.name for b in self._backends]
@@ -149,6 +165,18 @@ class VADStage(PipelineStage):
                 "expected int or float. Check the formula."
             )
             point["composite_score"] = float(score)
+
+        # Append synthetic composite-backend frames — one per unified time
+        # point — to the tagged frame list so downstream consumers (writer,
+        # GUI) see the composite timeline as a first-class series.
+        for point in aligned:
+            tagged_frames.append(
+                RawVadFrame(
+                    time_ms=int(point["time_ms"]),
+                    prob=float(point["composite_score"]),
+                    backend="composite",
+                )
+            )
 
         # Determine frame duration for hysteresis (use median gap or default 16ms)
         frame_duration_ms = _estimate_frame_duration(aligned)
@@ -182,7 +210,9 @@ class VADStage(PipelineStage):
             for start, end in segments
         ]
 
-        return dataclasses.replace(ctx, vad_segments=vad_segments)
+        return dataclasses.replace(
+            ctx, vad_segments=vad_segments, vad_frames=tagged_frames
+        )
 
     # ------------------------------------------------------------------
     # Step 2: Frame alignment
