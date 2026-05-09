@@ -11,7 +11,8 @@
       "Bash(spectra instructions *)",
       "Bash(spectra list *)",
       "Bash(spectra unpark *)",
-      "Bash(spectra in-progress *)"
+      "Bash(spectra in-progress *)",
+      "Bash(git *)"
     ]
   },
   "enabledPlugins": {
