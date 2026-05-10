@@ -69,6 +69,22 @@ class FileSnapshotLoader:
         with path.open("r", encoding="utf-8") as fh:
             payload = json.load(fh)
 
+        # Normalise ProjectFile format (written by the main pipeline CLI) into
+        # the ProjectSnapshot field names expected below.
+        if "source_path" not in payload and "media" in payload:
+            media = payload["media"]
+            payload = {
+                **payload,
+                "source_path": str(media.get("path", "")),
+                "config_snapshot": payload.get("config", {}),
+                "audio_info": {
+                    "sample_rate": 0,
+                    "duration_ms": int(media.get("duration_ms", 0)),
+                    "rms_mean": 0.0,
+                    "rms_peak": 0.0,
+                },
+            }
+
         for required in _REQUIRED_SCALAR_FIELDS:
             if required not in payload:
                 raise KeyError(required)

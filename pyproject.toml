@@ -43,6 +43,9 @@ dev = [
 
 [project.scripts]
 talking-parrot = "talking_parrot.cli:main"
+talking-parrot-gui = "talking_parrot.gui.cli:main"
+talking-parrot-mcp = "talking_parrot.mcp.cli:main"
+talking-parrot-regression = "talking_parrot.regression.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.3,<0.12.0"]

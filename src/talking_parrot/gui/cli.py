@@ -74,7 +74,7 @@ def resolve_config(
     if env is None:
         env = os.environ
     parser = _build_parser()
-    args = parser.parse_args(list(argv) if argv is not None else [])
+    args = parser.parse_args(list(argv) if argv is not None else None)
 
     host = args.host if args.host is not None else env.get(_ENV_HOST, _DEFAULT_HOST)
 

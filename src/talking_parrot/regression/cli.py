@@ -47,6 +47,7 @@ class RegressionConfig:
     cer_tolerance: float
     confidence_tolerance: float
     strict_missing: bool
+    pipeline_config: Path | None = None
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -65,6 +66,15 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
     )
     parser.add_argument("--strict-missing", action="store_true")
+    parser.add_argument(
+        "--pipeline-config",
+        default=None,
+        help=(
+            "Path to a talking-parrot pipeline YAML config. "
+            "When provided, the real pipeline is invoked for each variant. "
+            "When omitted, a stub factory is used (raises NotImplementedError)."
+        ),
+    )
     return parser
 
 
@@ -80,6 +90,7 @@ def parse_args(argv: Sequence[str] | None = None) -> RegressionConfig:
         cer_tolerance=float(args.cer_tolerance),
         confidence_tolerance=float(args.confidence_tolerance),
         strict_missing=bool(args.strict_missing),
+        pipeline_config=Path(args.pipeline_config) if args.pipeline_config else None,
     )
 
 
@@ -138,6 +149,17 @@ def main(
     if not config.samples_dir.exists():
         _logger.error("samples directory not found: %s", config.samples_dir)
         return 2
+
+    if pipeline_runner_factory is None and config.pipeline_config is not None:
+        if not config.pipeline_config.exists():
+            _logger.error("pipeline config not found: %s", config.pipeline_config)
+            return 2
+        from talking_parrot.regression.pipeline_wiring import (
+            build_production_pipeline_runner_factory,
+        )
+        pipeline_runner_factory = build_production_pipeline_runner_factory(
+            config.pipeline_config
+        )
 
     store: BaselineStore = baseline_store or JsonBaselineStore(
         config.samples_dir, label=config.label
