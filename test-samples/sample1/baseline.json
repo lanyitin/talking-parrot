@@ -1,0 +1,36 @@
+{
+  "captured_at": "",
+  "label": null,
+  "sample_id": "sample1",
+  "schema_version": 1,
+  "score_card": {
+    "cue_diffs": [
+      {
+        "cer": 0.0,
+        "end_ms_delta": 0,
+        "hypothesis_text": "皆さん、はじめまして。本日はこのような場でお話しする機会をいただき",
+        "index": 1,
+        "reference_text": "",
+        "start_ms_delta": 0
+      },
+      {
+        "cer": 0.0,
+        "end_ms_delta": 0,
+        "hypothesis_text": "、とても光栄に思っております。",
+        "index": 2,
+        "reference_text": "",
+        "start_ms_delta": 0
+      }
+    ],
+    "metric_bundle": {
+      "cer": 0.0,
+      "confidence_mean": 0.9445735450943378,
+      "confidence_p10": 0.9445735450943378,
+      "no_speech_prob_mean": 0.03205030784010887,
+      "repetition_ratio_mean": 0.0
+    },
+    "overall_score": 0.9722867725471689,
+    "sample_id": "sample1"
+  },
+  "variant_file": ""
+}
