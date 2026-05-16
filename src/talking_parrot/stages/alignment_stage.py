@@ -139,6 +139,8 @@ class AlignmentStage(PipelineStage):
         absolute_tokens_per_result: list[list[AlignedToken]] = []
         successful_chunks_count = 0
 
+        audio_duration_ms = self._audio_reader.duration_ms
+
         for result in ctx.transcription_results:
             # Read audio per-segment using the result's own absolute time bounds,
             # NOT the parent chunk's bounds. After the segment-level
@@ -146,7 +148,23 @@ class AlignmentStage(PipelineStage):
             # produce multiple TranscriptionResult rows, each carrying its own
             # (start_ms, end_ms). result.chunk_index is retained for diagnostic
             # logging only and MUST NOT be used to derive the audio range.
-            audio_bytes = self._audio_reader.read(result.start_ms, result.end_ms)
+            #
+            # Clamp end_ms to the probed duration — on some platforms (e.g.
+            # Windows) the container-reported duration can disagree with the
+            # actual sample count, leaving transcription timestamps slightly
+            # beyond the readable range.
+            clamped_end_ms = min(result.end_ms, audio_duration_ms)
+            if result.start_ms >= clamped_end_ms:
+                logger.warning(
+                    "skipping alignment for chunk: start_ms beyond audio duration",
+                    chunk_index=result.chunk_index,
+                    result_start_ms=result.start_ms,
+                    result_end_ms=result.end_ms,
+                    audio_duration_ms=audio_duration_ms,
+                )
+                absolute_tokens_per_result.append([])
+                continue
+            audio_bytes = self._audio_reader.read(result.start_ms, clamped_end_ms)
             try:
                 tokens = backend.align(audio_bytes, sample_rate, result.text)
             except Exception as exc:

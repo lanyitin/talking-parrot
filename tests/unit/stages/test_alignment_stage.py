@@ -104,15 +104,21 @@ class _FakeAlignmentBackend(AlignmentBackend):
 class _StubAudioReader(AudioReader):
     """Audio reader that returns a fixed-size silence buffer per ``read`` call."""
 
-    def __init__(self, sample_rate: int = 16000) -> None:
-        """Capture the sample rate."""
+    def __init__(self, sample_rate: int = 16000, duration_ms: int = 10_000_000) -> None:
+        """Capture the sample rate and duration."""
         self._sample_rate = sample_rate
+        self._duration_ms = duration_ms
         self.read_calls: list[tuple[int, int]] = []
 
     @property
     def sample_rate(self) -> int:
         """Return the configured sample rate."""
         return self._sample_rate
+
+    @property
+    def duration_ms(self) -> int:
+        """Return the configured duration."""
+        return self._duration_ms
 
     def read(self, start_ms: int, end_ms: int) -> bytes:
         """Return a silence buffer sized to the requested window."""

@@ -32,6 +32,11 @@ class _StubAudioReader(AudioReader):
     def sample_rate(self) -> int:
         return 16_000
 
+    @property
+    def duration_ms(self) -> int:
+        """Return a large sentinel duration so bounds checks never fire."""
+        return 10_000_000
+
     def read(self, start_ms: int, end_ms: int) -> bytes:
         return b""
 

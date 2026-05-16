@@ -8,6 +8,11 @@ class AudioReader(abc.ABC):
     @abc.abstractmethod
     def sample_rate(self) -> int: ...
 
+    @property
+    @abc.abstractmethod
+    def duration_ms(self) -> int:
+        """Total audio duration in milliseconds."""
+
     @abc.abstractmethod
     def read(self, start_ms: int, end_ms: int) -> bytes:
         """Return PCM bytes for [start_ms, end_ms).
