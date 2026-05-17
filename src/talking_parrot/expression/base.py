@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 import ast
+import functools
 from typing import Any
 
 
@@ -31,11 +32,22 @@ class SafeExpressionEvaluator(abc.ABC):
         """Set of Python literal types (int, float, …) the subclass permits."""
 
     def evaluate(self, expression: str, variables: dict[str, Any]) -> Any:
+        """Evaluate *expression* with the given *variables*.
+
+        The parsed AST is cached per expression string so repeated calls with
+        the same formula (the common case in a per-frame loop) pay the
+        ``ast.parse`` cost only once.
+        """
+        tree = self._parse_cached(expression)
+        return self._visit(tree.body, variables)
+
+    @functools.lru_cache(maxsize=32)
+    def _parse_cached(self, expression: str) -> ast.Expression:
+        """Parse *expression* and return the AST, cached by expression string."""
         try:
-            tree = ast.parse(expression, mode="eval")
+            return ast.parse(expression, mode="eval")
         except SyntaxError as exc:
             raise ExpressionError(f"Syntax error in expression: {exc}") from exc
-        return self._visit(tree.body, variables)
 
     def _visit(self, node: ast.AST, variables: dict[str, Any]) -> Any:
         if isinstance(node, ast.Constant):
