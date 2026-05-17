@@ -253,14 +253,17 @@ def test_per_segment_metrics_raw_not_aggregated() -> None:
 
 
 def test_segment_start_end_ms_use_segment_timestamps() -> None:
-    """Per-segment ``start_ms``/``end_ms`` MUST be ``chunk.start_ms +
-    int(round(segment.start * 1000))`` (and end likewise), not the chunk bounds.
+    """Per-segment ``start_ms``/``end_ms`` MUST equal ``int(round(seg.start * 1000))``
+    directly — faster_whisper returns absolute timestamps (relative to the full
+    file) when ``clip_timestamps`` is used, so ``chunk.start_ms`` must NOT be
+    added again.
     """
     model_cls = MagicMock()
     instance = MagicMock()
+    # Simulate faster_whisper returning absolute timestamps (chunk starts at 10 s).
     segs = [
-        _segment(0.0, 2.0, "alpha"),
-        _segment(2.5, 5.0, "beta"),
+        _segment(10.0, 12.0, "alpha"),
+        _segment(12.5, 15.0, "beta"),
     ]
     instance.transcribe.return_value = (iter(segs), _info("en"))
     model_cls.return_value = instance

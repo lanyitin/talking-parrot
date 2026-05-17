@@ -95,8 +95,12 @@ class FasterWhisperBackend(TranscriptionBackend):
         results: list[TranscriptionResult] = []
         for seg in segments:
             seg_text = (seg.text or "").strip()
-            start_ms = chunk.start_ms + int(round(seg.start * 1000))
-            end_ms = chunk.start_ms + int(round(seg.end * 1000))
+            # faster_whisper returns timestamps that are absolute (relative to
+            # the full file start) when clip_timestamps is used, so do NOT add
+            # chunk.start_ms — unlike mlx_whisper which processes only the
+            # chunk's PCM slice and returns chunk-relative timestamps.
+            start_ms = int(round(seg.start * 1000))
+            end_ms = int(round(seg.end * 1000))
             metrics = TranscriptionMetrics(
                 avg_logprob=seg.avg_logprob,
                 compression_ratio=seg.compression_ratio,
