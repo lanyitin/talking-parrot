@@ -18,6 +18,7 @@ Processing pipeline within the stage:
 
 from __future__ import annotations
 
+import bisect
 import dataclasses
 from typing import TYPE_CHECKING
 
@@ -244,6 +245,14 @@ class VADStage(PipelineStage):
             for frame in frames:
                 all_times.add(frame.time_ms)
 
+        # Pre-build sorted time_ms index per backend for O(log n) lookup.
+        # Frames are already in ascending time order (produced sequentially
+        # by each backend), so no extra sort is needed.
+        backend_times: dict[str, list[int]] = {
+            name: [f.time_ms for f in frames]
+            for name, frames in backend_frames.items()
+        }
+
         aligned: list[dict] = []
         for t in sorted(all_times):
             point: dict = {"time_ms": t}
@@ -251,8 +260,14 @@ class VADStage(PipelineStage):
                 if not frames:
                     point[f"{name}_prob"] = 0.0
                     continue
-                # Find the nearest frame within tolerance
-                nearest = min(frames, key=lambda f: abs(f.time_ms - t))
+                times = backend_times[name]
+                pos = bisect.bisect_left(times, t)
+                candidates = []
+                if pos > 0:
+                    candidates.append(frames[pos - 1])
+                if pos < len(frames):
+                    candidates.append(frames[pos])
+                nearest = min(candidates, key=lambda f: abs(f.time_ms - t))
                 if abs(nearest.time_ms - t) <= _TOLERANCE_MS:
                     point[f"{name}_prob"] = nearest.prob
                 else:
