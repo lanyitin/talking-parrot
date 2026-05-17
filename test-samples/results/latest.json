@@ -1,40 +1,10 @@
 {
-  "generated_at": "2026-05-17T14:27:31+00:00",
+  "generated_at": "2026-05-17T15:31:34+00:00",
   "label": null,
-  "overall_verdict": "stable",
+  "overall_verdict": "bootstrapped",
   "samples": [
     {
-      "baseline": {
-        "score_card": {
-          "cue_diffs": [
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "皆さん、はじめまして。本日はこのような場でお話しする機会をいただき",
-              "index": 1,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、とても光栄に思っております。",
-              "index": 2,
-              "reference_text": "",
-              "start_ms_delta": 0
-            }
-          ],
-          "metric_bundle": {
-            "cer": 0.0,
-            "confidence_mean": 0.9445735450943378,
-            "confidence_p10": 0.9445735450943378,
-            "no_speech_prob_mean": 0.03205030784010887,
-            "repetition_ratio_mean": 0.0
-          },
-          "overall_score": 0.9722867725471689,
-          "sample_id": "sample1"
-        }
-      },
+      "baseline": null,
       "current": {
         "score_card": {
           "cue_diffs": [
@@ -66,49 +36,20 @@
           "sample_id": "sample1"
         }
       },
-      "delta": {
-        "cer": 0.0,
-        "confidence_mean": 0.023341653589901368,
-        "confidence_p10": 0.023341653589901368,
-        "no_speech_prob_mean": -0.02566465176641941,
-        "repetition_ratio_mean": 0.0
-      },
+      "delta": null,
       "sample_id": "sample1",
+      "stage_timings": {
+        "alignment": 11.332243541000025,
+        "chunking": 7.041699996079842e-05,
+        "post_processing": 0.00027133399999001995,
+        "transcription": 6.2997633329998735,
+        "vad": 0.2636469159999706
+      },
       "variant_file": "base.mp3",
-      "verdict": "stable"
+      "verdict": "bootstrapped"
     },
     {
-      "baseline": {
-        "score_card": {
-          "cue_diffs": [
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "皆さん、はじめまして。本日はこのような場でお話しする機会をいただき",
-              "index": 1,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、とても光栄に思っております。",
-              "index": 2,
-              "reference_text": "",
-              "start_ms_delta": 0
-            }
-          ],
-          "metric_bundle": {
-            "cer": 0.0,
-            "confidence_mean": 0.9445735450943378,
-            "confidence_p10": 0.9445735450943378,
-            "no_speech_prob_mean": 0.03205030784010887,
-            "repetition_ratio_mean": 0.0
-          },
-          "overall_score": 0.9722867725471689,
-          "sample_id": "sample1"
-        }
-      },
+      "baseline": null,
       "current": {
         "score_card": {
           "cue_diffs": [
@@ -140,49 +81,20 @@
           "sample_id": "sample1"
         }
       },
-      "delta": {
-        "cer": 0.0,
-        "confidence_mean": 0.02194372569382641,
-        "confidence_p10": 0.02194372569382641,
-        "no_speech_prob_mean": -0.02791913179680705,
-        "repetition_ratio_mean": 0.0
-      },
+      "delta": null,
       "sample_id": "sample1",
+      "stage_timings": {
+        "alignment": 7.745891208000103,
+        "chunking": 7.670799982406606e-05,
+        "post_processing": 0.00023575000000164437,
+        "transcription": 2.2458554170000298,
+        "vad": 0.2581360000001496
+      },
       "variant_file": "base_10_percent_volume.mp3",
-      "verdict": "stable"
+      "verdict": "bootstrapped"
     },
     {
-      "baseline": {
-        "score_card": {
-          "cue_diffs": [
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "皆さん、はじめまして。本日はこのような場でお話しする機会をいただき",
-              "index": 1,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、とても光栄に思っております。",
-              "index": 2,
-              "reference_text": "",
-              "start_ms_delta": 0
-            }
-          ],
-          "metric_bundle": {
-            "cer": 0.0,
-            "confidence_mean": 0.9445735450943378,
-            "confidence_p10": 0.9445735450943378,
-            "no_speech_prob_mean": 0.03205030784010887,
-            "repetition_ratio_mean": 0.0
-          },
-          "overall_score": 0.9722867725471689,
-          "sample_id": "sample1"
-        }
-      },
+      "baseline": null,
       "current": {
         "score_card": {
           "cue_diffs": [
@@ -214,465 +126,20 @@
           "sample_id": "sample1"
         }
       },
-      "delta": {
-        "cer": 0.0,
-        "confidence_mean": 0.0,
-        "confidence_p10": 0.0,
-        "no_speech_prob_mean": 0.0,
-        "repetition_ratio_mean": 0.0
-      },
+      "delta": null,
       "sample_id": "sample1",
+      "stage_timings": {
+        "alignment": 8.062055999999984,
+        "chunking": 5.97499999912543e-05,
+        "post_processing": 0.0002430419999654987,
+        "transcription": 2.2403997090000303,
+        "vad": 0.2572222090000196
+      },
       "variant_file": "base_metal_drump.mp3",
-      "verdict": "stable"
+      "verdict": "bootstrapped"
     },
     {
-      "baseline": {
-        "score_card": {
-          "cue_diffs": [
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "皆さん、はじめまして。本日はこのような場でお話しする機会をいただき",
-              "index": 1,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、とても光栄に思っております。",
-              "index": 2,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "私の名前は林雅子と申します。どうぞよろしくお願いいたします。",
-              "index": 3,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "台湾の台北出身で、現在も台北に住んでおります。",
-              "index": 4,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "生まれも育ちも台北で、この街がとても大好きです。",
-              "index": 5,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "夜市の雰囲気や、MRTでどこへでも気軽に行けるところが特に気に入っています。",
-              "index": 6,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "学歴についてお話しすると、台湾大学で情報工学を専攻しておりました。",
-              "index": 7,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "大学時代は、プログラミングや情報システムについて一から学び、",
-              "index": 8,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "特にデータベースやネットワークの授業が面白くて",
-              "index": 9,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、毎日夢中で勉強していたのを覚えています。",
-              "index": 10,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "卒業後は大学院にも進みまして、システム開発に関する研究を続けました。",
-              "index": 11,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "論文のテーマはログ解析システムの効率化に関するものでして、",
-              "index": 12,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "その経験が今の仕事にも大いに役立っていると感じています。",
-              "index": 13,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "現在はIT企業でシステムエンジニアとして働いております。",
-              "index": 14,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "主な業務は、銀行向けの業務システムの開発と運用管理です。",
-              "index": 15,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "これまでに携わったプロジェクトの中で、特に印象深いのは",
-              "index": 16,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、観測基盤システムの構築プロジェクトです。",
-              "index": 17,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "このプロジェクトでは、サーバーのログを自動的に収集",
-              "index": 18,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、分析するシステムを一から設計して、",
-              "index": 19,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "チームのメンバーと一緒に作り上げました。",
-              "index": 20,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "とても大変でしたが",
-              "index": 21,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、システムが無事に稼働した時の達成感は今でも忘れられません。",
-              "index": 22,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "技術的な面では、JavaやPythonを使ったバックエンド開発が得意で、",
-              "index": 23,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "最近はエラスティックサーチやクラウドインフラの管理にも力を入れています。",
-              "index": 24,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "新しい技術を積極的に学ぶことが好きで、",
-              "index": 25,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "週末には自分のサーバーで色々と実験することもあります。",
-              "index": 26,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "ちょっとオタクっぽいかもしれませんが、わら、これが私の趣味でもあります。",
-              "index": 27,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "性格についてお話しすると、自分では好奇心旺",
-              "index": 28,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "盛で、粘り強い性格だと思っています。",
-              "index": 29,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "一度やり始めたことは最後までやり遂げたいという気持ちが強くて",
-              "index": 30,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、困難な問題に直面しても、なかなか諦めない方です。",
-              "index": 31,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "同僚からは、どんな難しい問題でも",
-              "index": 32,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、いつか解決策を見つけてくるよねと言われることがあって、",
-              "index": 33,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "それがちょっと嬉しかったりします。",
-              "index": 34,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "また、チームワークを大切にしています。",
-              "index": 35,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "一人で抱え込むよりも、チームで話し合いながら進める",
-              "index": 36,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "方が、より良いアイデアが生まれると信じています。",
-              "index": 37,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "後輩の質問には丁寧に答えるよう心がけていて",
-              "index": 38,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、自分が先輩に助けてもらったように、今度は私が誰かの力になれたらと思っています。",
-              "index": 39,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "お仕事の話ばかりになってしまいましたが、プライベートについても少しだけ。",
-              "index": 40,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "趣味はいくつかあるのですが、まず読書が好きです。",
-              "index": 41,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "特にエッセイや自己啓発系の本をよく読んでいます。",
-              "index": 42,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "忙しい毎日の中でも、寝る前の30分は本を読む時間にしていて",
-              "index": 43,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、それが1日の終わりの楽しみになっています。",
-              "index": 44,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "もう一つは料理です。",
-              "index": 45,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "台湾料理はもちろん、最近は日本料理にも挑戦していて",
-              "index": 46,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、先日初めて茶碗蒸しを作ってみました。",
-              "index": 47,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "意外とうまくできて、",
-              "index": 48,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "自分でもびっくりしました。笑。",
-              "index": 49,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "それから、語学学習も趣味の一つです。",
-              "index": 50,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "日本語は独学で勉強を始めて、かれこれ5年ほどになります。",
-              "index": 51,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "日本のドラマや映画を字幕なしで楽しめるようになった時は、本当に感動しました。",
-              "index": 52,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "日本語の勉強を通じて、日本の文化や考え方にも興味を持つようになり",
-              "index": 53,
-              "reference_text": "",
-              "start_ms_delta": 0
-            },
-            {
-              "cer": 0.0,
-              "end_ms_delta": 0,
-              "hypothesis_text": "、いつかは日本を旅行してみたいと思っています。",
-              "index": 54,
-              "reference_text": "",
-              "start_ms_delta": 0
-            }
-          ],
-          "metric_bundle": {
-            "cer": 0.0389048991354467,
-            "confidence_mean": 0.9549084961516193,
-            "confidence_p10": 0.9437229554984053,
-            "no_speech_prob_mean": 0.07013222393466205,
-            "repetition_ratio_mean": 0.0
-          },
-          "overall_score": 0.9580017985080863,
-          "sample_id": "sample2"
-        }
-      },
+      "baseline": null,
       "current": {
         "score_card": {
           "cue_diffs": [
@@ -1120,16 +587,17 @@
           "sample_id": "sample2"
         }
       },
-      "delta": {
-        "cer": 0.0,
-        "confidence_mean": 0.0,
-        "confidence_p10": 0.0,
-        "no_speech_prob_mean": 0.0,
-        "repetition_ratio_mean": 0.0
-      },
+      "delta": null,
       "sample_id": "sample2",
+      "stage_timings": {
+        "alignment": 78.88322137500018,
+        "chunking": 0.0002528340000935714,
+        "post_processing": 0.0019931669999095902,
+        "transcription": 48.09311779200016,
+        "vad": 5.046626750000087
+      },
       "variant_file": "base.mp3",
-      "verdict": "stable"
+      "verdict": "bootstrapped"
     }
   ],
   "schema_version": 1
