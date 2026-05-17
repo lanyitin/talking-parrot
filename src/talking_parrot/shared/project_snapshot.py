@@ -58,6 +58,7 @@ class ProjectSnapshot:
     transcription_results: list[TranscriptionResult] = field(default_factory=list)
     pre_postprocess_subtitles: list[Subtitle] = field(default_factory=list)
     subtitles: list[Subtitle] = field(default_factory=list)
+    stage_timings: dict[str, float] = field(default_factory=dict)
 
     @classmethod
     def from_project_file(

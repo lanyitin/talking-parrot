@@ -349,6 +349,11 @@ class RegressionRunner:
         descriptor: SampleDescriptor,
     ) -> SampleReportEntry:
         """Convert a :class:`RunResult` into a :class:`SampleReportEntry`."""
+        stage_timings = (
+            dict(result.snapshot.stage_timings)
+            if result.snapshot is not None
+            else {}
+        )
         if result.score_card is None:
             # Skipped — produce an empty placeholder ScoreCard so the entry
             # type stays homogeneous. We use shared.MetricBundle zeros.
@@ -373,6 +378,7 @@ class RegressionRunner:
                 current=placeholder,
                 baseline=None,
                 delta=None,
+                stage_timings=stage_timings,
             )
         # For reporting we want the baseline (if any) at the time of run.
         baseline = (
@@ -388,6 +394,7 @@ class RegressionRunner:
             current=result.score_card,
             baseline=baseline,
             delta=delta,
+            stage_timings=stage_timings,
         )
 
 

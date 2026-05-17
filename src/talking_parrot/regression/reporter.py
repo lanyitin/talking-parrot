@@ -15,7 +15,7 @@ import json
 import logging
 import os
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from talking_parrot.shared import ScoreCard
@@ -53,6 +53,7 @@ class SampleReportEntry:
     current: ScoreCard
     baseline: ScoreCard | None
     delta: dict[str, float] | None
+    stage_timings: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,6 +126,7 @@ def _report_to_json_dict(report: RegressionReport) -> dict:
                 "current": {"score_card": _score_card_to_json(entry.current)},
                 "baseline": baseline_obj,
                 "delta": delta_obj,
+                "stage_timings": dict(entry.stage_timings),
             }
         )
     return {
@@ -163,6 +165,17 @@ def _render_html(report: RegressionReport) -> str:
             f"hyp={html.escape(d.hypothesis_text)}</li>"
             for d in entry.current.cue_diffs
         )
+        timing_rows = "\n".join(
+            f"<li>{html.escape(stage)}: {secs:.2f}s</li>"
+            for stage, secs in entry.stage_timings.items()
+        )
+        timing_total = sum(entry.stage_timings.values())
+        timing_cell = (
+            f"<details><summary>{timing_total:.1f}s total</summary>"
+            f"<ul>{timing_rows}</ul></details>"
+            if entry.stage_timings
+            else "—"
+        )
         rows.append(
             f"<tr>"
             f"<td>{html.escape(entry.sample_id)}</td>"
@@ -171,6 +184,7 @@ def _render_html(report: RegressionReport) -> str:
             f"{html.escape(entry.verdict)}</td>"
             f"<td>{cer:.4f}</td>"
             f"<td>{conf:.4f}</td>"
+            f"<td>{timing_cell}</td>"
             f"<td><details><summary>cue diffs ({len(entry.current.cue_diffs)})"
             f"</summary><ul>{cue_rows}</ul></details></td>"
             f"</tr>"
@@ -195,7 +209,7 @@ def _render_html(report: RegressionReport) -> str:
         "<table>\n"
         "<thead><tr>"
         "<th>sample_id</th><th>variant_file</th><th>verdict</th>"
-        "<th>cer</th><th>confidence_mean</th><th>cue_diffs</th>"
+        "<th>cer</th><th>confidence_mean</th><th>stage_timings</th><th>cue_diffs</th>"
         "</tr></thead>\n"
         f"<tbody>\n{table_body}\n</tbody>\n"
         "</table>\n"

@@ -124,6 +124,7 @@ def build_production_pipeline_runner_factory(
                 transcription_results=list(ctx.transcription_results),
                 pre_postprocess_subtitles=[],
                 subtitles=list(ctx.subtitles),
+                stage_timings=dict(orchestrator.stage_timings),
             )
 
         return runner

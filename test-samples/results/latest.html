@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>Talking Parrot Regression Report</title>
+<style>body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 2em; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 0.4em 0.8em; text-align: left; }
+th { background: #f4f4f4; }
+.verdict-regressed { background: #fdd; color: #900; font-weight: bold; }
+.verdict-improved { background: #dfd; color: #060; font-weight: bold; }
+.verdict-stable { background: #ffd; color: #660; }
+.verdict-bootstrapped { background: #ddf; color: #006; }
+.verdict-skipped { background: #eee; color: #555; }
+.verdict-unscored { background: #eee; color: #555; }
+details { margin: 0.5em 0; }</style>
+</head>
+<body>
+<h1>Talking Parrot Regression Report</h1>
+<p>Generated at 2026-05-17T14:27:31+00:00 — label: (none) — overall verdict: <span class="verdict-stable">stable</span></p>
+<table>
+<thead><tr><th>sample_id</th><th>variant_file</th><th>verdict</th><th>cer</th><th>confidence_mean</th><th>cue_diffs</th></tr></thead>
+<tbody>
+<tr><td>sample1</td><td>base.mp3</td><td class="verdict-stable">stable</td><td>0.0000</td><td>0.9679</td><td><details><summary>cue diffs (2)</summary><ul><li>#1 cer=0.0000 hyp=皆さん、はじめまして。本日はこのような場でお話しする機会をいただき</li>
+<li>#2 cer=0.0000 hyp=、とても光栄に思っております。</li></ul></details></td></tr>
+<tr><td>sample1</td><td>base_10_percent_volume.mp3</td><td class="verdict-stable">stable</td><td>0.0000</td><td>0.9665</td><td><details><summary>cue diffs (2)</summary><ul><li>#1 cer=0.0000 hyp=皆さん、はじめまして。本日はこのような場でお話しする機会をいただき</li>
+<li>#2 cer=0.0000 hyp=、とても光栄に思っております。</li></ul></details></td></tr>
+<tr><td>sample1</td><td>base_metal_drump.mp3</td><td class="verdict-stable">stable</td><td>0.0000</td><td>0.9446</td><td><details><summary>cue diffs (2)</summary><ul><li>#1 cer=0.0000 hyp=皆さん、はじめまして。本日はこのような場でお話しする機会をいただき</li>
+<li>#2 cer=0.0000 hyp=、とても光栄に思っております。</li></ul></details></td></tr>
+<tr><td>sample2</td><td>base.mp3</td><td class="verdict-stable">stable</td><td>0.0389</td><td>0.9549</td><td><details><summary>cue diffs (54)</summary><ul><li>#1 cer=0.0000 hyp=皆さん、はじめまして。本日はこのような場でお話しする機会をいただき</li>
+<li>#2 cer=0.0000 hyp=、とても光栄に思っております。</li>
+<li>#3 cer=0.0000 hyp=私の名前は林雅子と申します。どうぞよろしくお願いいたします。</li>
+<li>#4 cer=0.0000 hyp=台湾の台北出身で、現在も台北に住んでおります。</li>
+<li>#5 cer=0.0000 hyp=生まれも育ちも台北で、この街がとても大好きです。</li>
+<li>#6 cer=0.0000 hyp=夜市の雰囲気や、MRTでどこへでも気軽に行けるところが特に気に入っています。</li>
+<li>#7 cer=0.0000 hyp=学歴についてお話しすると、台湾大学で情報工学を専攻しておりました。</li>
+<li>#8 cer=0.0000 hyp=大学時代は、プログラミングや情報システムについて一から学び、</li>
+<li>#9 cer=0.0000 hyp=特にデータベースやネットワークの授業が面白くて</li>
+<li>#10 cer=0.0000 hyp=、毎日夢中で勉強していたのを覚えています。</li>
+<li>#11 cer=0.0000 hyp=卒業後は大学院にも進みまして、システム開発に関する研究を続けました。</li>
+<li>#12 cer=0.0000 hyp=論文のテーマはログ解析システムの効率化に関するものでして、</li>
+<li>#13 cer=0.0000 hyp=その経験が今の仕事にも大いに役立っていると感じています。</li>
+<li>#14 cer=0.0000 hyp=現在はIT企業でシステムエンジニアとして働いております。</li>
+<li>#15 cer=0.0000 hyp=主な業務は、銀行向けの業務システムの開発と運用管理です。</li>
+<li>#16 cer=0.0000 hyp=これまでに携わったプロジェクトの中で、特に印象深いのは</li>
+<li>#17 cer=0.0000 hyp=、観測基盤システムの構築プロジェクトです。</li>
+<li>#18 cer=0.0000 hyp=このプロジェクトでは、サーバーのログを自動的に収集</li>
+<li>#19 cer=0.0000 hyp=、分析するシステムを一から設計して、</li>
+<li>#20 cer=0.0000 hyp=チームのメンバーと一緒に作り上げました。</li>
+<li>#21 cer=0.0000 hyp=とても大変でしたが</li>
+<li>#22 cer=0.0000 hyp=、システムが無事に稼働した時の達成感は今でも忘れられません。</li>
+<li>#23 cer=0.0000 hyp=技術的な面では、JavaやPythonを使ったバックエンド開発が得意で、</li>
+<li>#24 cer=0.0000 hyp=最近はエラスティックサーチやクラウドインフラの管理にも力を入れています。</li>
+<li>#25 cer=0.0000 hyp=新しい技術を積極的に学ぶことが好きで、</li>
+<li>#26 cer=0.0000 hyp=週末には自分のサーバーで色々と実験することもあります。</li>
+<li>#27 cer=0.0000 hyp=ちょっとオタクっぽいかもしれませんが、わら、これが私の趣味でもあります。</li>
+<li>#28 cer=0.0000 hyp=性格についてお話しすると、自分では好奇心旺</li>
+<li>#29 cer=0.0000 hyp=盛で、粘り強い性格だと思っています。</li>
+<li>#30 cer=0.0000 hyp=一度やり始めたことは最後までやり遂げたいという気持ちが強くて</li>
+<li>#31 cer=0.0000 hyp=、困難な問題に直面しても、なかなか諦めない方です。</li>
+<li>#32 cer=0.0000 hyp=同僚からは、どんな難しい問題でも</li>
+<li>#33 cer=0.0000 hyp=、いつか解決策を見つけてくるよねと言われることがあって、</li>
+<li>#34 cer=0.0000 hyp=それがちょっと嬉しかったりします。</li>
+<li>#35 cer=0.0000 hyp=また、チームワークを大切にしています。</li>
+<li>#36 cer=0.0000 hyp=一人で抱え込むよりも、チームで話し合いながら進める</li>
+<li>#37 cer=0.0000 hyp=方が、より良いアイデアが生まれると信じています。</li>
+<li>#38 cer=0.0000 hyp=後輩の質問には丁寧に答えるよう心がけていて</li>
+<li>#39 cer=0.0000 hyp=、自分が先輩に助けてもらったように、今度は私が誰かの力になれたらと思っています。</li>
+<li>#40 cer=0.0000 hyp=お仕事の話ばかりになってしまいましたが、プライベートについても少しだけ。</li>
+<li>#41 cer=0.0000 hyp=趣味はいくつかあるのですが、まず読書が好きです。</li>
+<li>#42 cer=0.0000 hyp=特にエッセイや自己啓発系の本をよく読んでいます。</li>
+<li>#43 cer=0.0000 hyp=忙しい毎日の中でも、寝る前の30分は本を読む時間にしていて</li>
+<li>#44 cer=0.0000 hyp=、それが1日の終わりの楽しみになっています。</li>
+<li>#45 cer=0.0000 hyp=もう一つは料理です。</li>
+<li>#46 cer=0.0000 hyp=台湾料理はもちろん、最近は日本料理にも挑戦していて</li>
+<li>#47 cer=0.0000 hyp=、先日初めて茶碗蒸しを作ってみました。</li>
+<li>#48 cer=0.0000 hyp=意外とうまくできて、</li>
+<li>#49 cer=0.0000 hyp=自分でもびっくりしました。笑。</li>
+<li>#50 cer=0.0000 hyp=それから、語学学習も趣味の一つです。</li>
+<li>#51 cer=0.0000 hyp=日本語は独学で勉強を始めて、かれこれ5年ほどになります。</li>
+<li>#52 cer=0.0000 hyp=日本のドラマや映画を字幕なしで楽しめるようになった時は、本当に感動しました。</li>
+<li>#53 cer=0.0000 hyp=日本語の勉強を通じて、日本の文化や考え方にも興味を持つようになり</li>
+<li>#54 cer=0.0000 hyp=、いつかは日本を旅行してみたいと思っています。</li></ul></details></td></tr>
+</tbody>
+</table>
+</body></html>
