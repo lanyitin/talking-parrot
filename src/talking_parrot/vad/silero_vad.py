@@ -113,20 +113,29 @@ class SileroVADBackend(VADBackend):
 
         model = self._get_model()
 
+        # Decode all samples once and normalise to [-1.0, 1.0] up front,
+        # avoiding repeated struct.unpack + list-comprehension + tensor
+        # creation inside the per-frame loop.
+        total_samples = num_frames * chunk_size
+        all_ints = struct.unpack(f"<{total_samples}h", audio_data[: total_samples * 2])
+        if _TORCH_AVAILABLE and torch is not None:
+            audio_tensor = (
+                torch.tensor(all_ints, dtype=torch.float32) / 32768.0
+            )
+        else:
+            audio_tensor = None  # type: ignore[assignment]
+
         frames: list[RawVadFrame] = []
 
         for i in range(num_frames):
-            byte_offset = i * chunk_size * 2
-            chunk_bytes = audio_data[byte_offset : byte_offset + chunk_size * 2]
-            chunk_ints = struct.unpack(f"<{chunk_size}h", chunk_bytes)
-            # Silero model expects a float32 tensor in [-1.0, 1.0].
-            # When torch is not available (e.g., during tests with mocked model),
-            # fall back to a plain list of floats.
-            float_samples = [s / 32768.0 for s in chunk_ints]
-            if _TORCH_AVAILABLE and torch is not None:
-                chunk_tensor = torch.tensor(float_samples, dtype=torch.float32)
+            if audio_tensor is not None:
+                chunk_tensor = audio_tensor[i * chunk_size : (i + 1) * chunk_size]
             else:
-                chunk_tensor = float_samples  # type: ignore[assignment]
+                # Fallback when torch is unavailable (e.g. unit tests with mocked model)
+                chunk_tensor = [  # type: ignore[assignment]
+                    s / 32768.0
+                    for s in all_ints[i * chunk_size : (i + 1) * chunk_size]
+                ]
 
             logger.debug(
                 "calling silero_vad model",
